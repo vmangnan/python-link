@@ -1,0 +1,630 @@
+# -*- coding: utf-8 -*-
+import re,string
+import pickle as p
+#il faut importer chardet et et l'implémenter dans la fonction
+class Fichier:
+	"""
+	Classe qui gére l'encodage,la lecture et l'écriture du fichier html
+	"""
+	def __init__(self,fichier):
+		self.path=fichier
+		self.ch_mod=""
+		self.encoding=""
+		
+	def find_enc(self) :
+	  default_encoding = 'iso-8859-1'
+	  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.+?)["\']'
+	  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+	  match_charset = re.search(pattern_compiled, self.ch_mod)
+	  if match_charset :
+		encoding = string.lower(match_charset.group(1))
+		print 'detected charset ::', encoding.encode('utf-8')
+	  else :
+		try:
+			#import chardet
+			x=chardet.detect(self.ch_mod)
+			self.encoding=x['encoding']
+		except:
+			print 'undetected charset, use default encoding ::', default_encoding
+			self.encoding='utf-8'
+
+	
+	def unicode_source(self):
+		self.ch_mod=unicode(self.ch_mod,self.encoding)
+		
+		
+	def read_file(self):
+		f=open(self.path,'r')
+		self.ch_mod=f.read()
+		f.close()
+		
+	def do(self):
+		self.read_file()
+		self.find_enc()
+		self.unicode_source()
+
+class Traitement(Fichier):
+	"""
+	Classe qui gére le traitement de la source html
+	"""
+	def __init__(self,fichier,chinois=False,spe=False):
+		Fichier.__init__(self,fichier)
+		self.do()
+		self.title=''
+		self.chinois=chinois
+		self.spe=spe
+		self.listmot=[]
+	
+	def extract_title(self) :
+		pattcomp = re.compile(u'<title>(.+)<\/title>', re.I)
+		trouv_titre = re.search(pattcomp, self.ch_mod)
+		if trouv_titre:
+			self.title=trouv_titre.group(1)
+		self.title= '::Title not found ::'
+	  
+	def clean_unicode_html(self) :
+		clean_html = re.sub(u'&nbsp;', ' ', self.ch_mod)
+		clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+		pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+		clean_html = pattern1.sub(u'', clean_html)
+
+		pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+		clean_html = pattern2.sub(u'', clean_html)
+
+		pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+		clean_html = pattern3.sub(u'', clean_html)
+
+		pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+		clean_html = pattern4.sub(u'', clean_html)
+
+		clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+		pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+		clean_html = pattern5.sub(u'', clean_html)
+
+		pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+		clean_html = pattern6.sub(u'', clean_html)
+		
+		pattern7 = re.compile(u'[&]?&eacute;', re.I | re.M)
+		clean_html = pattern7.sub(u'é', clean_html)
+		
+		pattern8 = re.compile(u'<+/?[a-z]+.*>', re.I | re.M)
+		clean_html = pattern8.sub(u'', clean_html)
+		
+		pattern9 = re.compile(u'[/d]', re.I | re.M)
+		clean_html = pattern9.sub(u'', clean_html)
+		
+		self.ch_mod=clean_html
+	def sep_word(self):
+		res=[]
+		pat=u'\w+'
+		x=re.compile(pat,re.I)
+		res=re.findall(x,self.ch_mod)
+		for i in res:
+			if i ==u'#':
+				del i
+		self.listmot=res
+	def sep_word_chinois(self):
+		res=[]
+		pat=u'.?'
+		x=re.compile(pat,re.I)
+		res=re.findall(x,self.ch_mod)
+		for i in res:
+			if i ==u'#':
+				del i
+		self.listmot=res
+		
+	def sep_word_spe(self):
+		x=self.ch_mod.split()
+		res=x
+		for i in res:
+			if i ==u'#':
+				del i
+		self.listmot=res
+		
+	def do_t(self):
+		self.extract_title()
+		self.clean_unicode_html()
+		if self.listmot == []:
+			if self.spe:
+				self.sep_word_spe()
+			if self.chinois:
+				self.sep_word_chinois()
+			else:
+				self.sep_word()
+		
+class Donnee:
+	def __init__(self,zipf='',trig='',suf=''):
+		self.z=zipf
+		self.t=trig
+		self.s=suf
+			
+import glob,re,matplotlib.pyplot as plt,matplotlib.legend as lt
+
+		
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def list2ul(l) :
+  s = ''
+  for e in l :
+    s += '<li>%s</li>'%(e)
+  return '<ul>%s</ul>'%s
+
+def dict2ul(d) :
+  s = ''
+  for k,e in d.iteritems() :
+	i,j=re.sub('u\'','',str(k)),re.sub('u\'','',str(e)) 
+	s += '<li>%s :: %s</li>'%(i,j)
+  return '<ul>%s</ul>'%s
+  
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+  
+def file2l(path):
+	x=glob.glob("corpus/"+path+"/*.htm")
+	if x == []:
+		x=glob.glob("corpus/"+path+"/*.html")
+	return x
+def url2name(url):
+	n=re.sub("[A-Za-z0-9]*[/]+",'',url)
+	n=re.sub('.htm+l?','',n)
+	return n
+
+def write_file(nwfile,ch):
+	f=open(nwfile,'w')
+	f.write(ch)
+	f.close()
+def pyplot(l,output,dossier):
+	plt.plot(l)
+	plt.loglog()
+	plt.ylabel('effectif')
+	plt.xlabel('rang')
+	plt.savefig(dossier+'/'+output+'.png')
+	#return output+'.png'
+	plt.close()
+def get_n_gram(l,n):
+	d={}
+	for i in xrange(len(l)-n):
+		ngram=tuple(l[i:i+n])
+		if ngram not in d:
+			d[tuple(l[i:i+n])]=1
+		else:
+			d[tuple(l[i:i+n])]+=1
+	return d
+def get_all_gram(l):
+	d={}
+	n=1
+	b=True
+	while b:
+		dng=get_n_gram(l,n)
+		b=check(dng)
+		n+=1
+		d.update(dng)
+	return d
+	
+def check(dng):
+	b=False
+	for _,eff in dng.iteritems():
+		if eff>2:
+			return True
+	return b
+
+	
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l,reverse=True)
+  return l
+
+				
+def color_string(s_unicode, substring, color) :
+  #print 'color string : %s'%(substring.encode('utf-8'))
+  pattern1 = re.compile(u'%s'%(substring), re.I | re.M)
+  replace = u'<span style="color:%s; background-color:grey;">%s</span>'%(color, substring)
+  output = pattern1.sub(replace, s_unicode)
+  return output
+  
+def colortext(d,source_unicode):
+	u=""
+	for i in d:
+		for k in i:
+			u=u+" "+k
+		source_unicode=color_string(source_unicode,u,'#33FFFF')
+		u=""
+	return source_unicode
+def supr_1_gram(d):
+	g={}
+	for i in d:
+		if not d[i]==1:
+			g.update({i:d[i]})
+	return g
+
+# -*- coding: utf-8 -*-
+from classe import *
+from tool import *
+import os
+import json
+import sys
+l_lang=['fr','en','de','nl','lt','es']
+
+def trigramme(fichier,spe=False):
+	"""
+	Voici la fonction qui fait les trigrammes
+	"""
+	f=Traitement(fichier,False,spe)
+	f.do_t()
+	s_unicode=f.ch_mod
+	l,u,y=[],0,[]
+	for i in s_unicode:
+		l+=[i]
+	while u<(len(l)-2):
+		y+=[tuple(l[u:u+3])]
+		u+=1
+	l=[]
+	for i in y:
+		ch=''
+		for j in i:
+			if (j !='#') and '#' not in j:
+				ch+=j
+			l.append(ch)
+	return l
+	
+	
+def tri_zipf(di):
+	"""
+	La fonction qui va effectuer le tri concernant la loi de Zipf
+	"""
+	eff_min=4
+	len_word={'min':1,'max':5}
+	d=[]
+	for i in di:
+		if len(i[0])>= len_word['min'] and len(i[0])< len_word['max']:
+			if di[i] >= eff_min :
+				d+=[i[0]]
+	return d
+
+		
+def zipf(fichier,spe=False):
+	"""
+	Fonction qui va nous renvoyer la liste de mot les plus courts et fréquents
+	"""
+	f=Traitement(fichier,False,spe)
+	f.do_t()
+	c=get_n_gram(f.listmot,1)
+	x=tri_zipf(c)
+	return x
+
+def tri_suffix(di):
+	"""
+	La fonction qui va effectuer le tri des suffixes
+	"""
+	l=[]
+	for i in di:
+		ch=i[0]
+		x=len(ch)
+		if x <= 3:
+			l+=[ch]
+		else:
+			l+=[ch[x-3:x]]
+	return l
+	
+def suffix(fichier,spe=False):
+	"""
+	Fonction qui va nous renvoyer la liste de mot les plus courts et fréquents
+	"""
+	f=Traitement(fichier,False,spe)
+	f.do_t()
+	c=get_n_gram(f.listmot,1)
+	x=tri_suffix(c)
+	return x
+  
+def file2l(corpus,lg):
+	x=glob.glob("corpus/"+path+"/"+lg+"/*.xml")
+	return x
+
+def recup_file(dossier):
+	"""
+	La fonction qui va récupérer la liste de fichier de tout un dossier
+	"""
+	l_lg=glob.glob(dossier+'/*')
+	print l_lg
+	l_fi=[]
+	for i in xrange(len(l_lg)):
+		l_fi.append([])
+		x=glob.glob(l_lg[i]+'/*')
+		l_fi[i]+=x
+	return l_fi
+
+def donnee_ent(l):
+	"""
+	Fonction qui va créer la base de donnée
+	"""
+	for i in l:
+		l_lg=[]
+		for j in i:
+			lang=re.search('celex.+/?(.+?).xml',j)
+			lg=lang.group(0)
+			lang=re.search('[.]+[a-z]+',lg)
+			lg=lang.group(0)
+			lg=re.sub('[.]','',lg)
+			z,t,s=zipf(j),trigramme(j),suffix(j)
+			x=Donnee(z,t,s)
+			l_lg+=[x]
+		print l_lg
+		v=commun_lg(l_lg)
+		try:
+			os.mkdir('donnee_e_'+lg)	
+		except:
+			pass
+		write_file('donnee_e_'+lg+'/'+lg+'.txt',json.dumps(v).encode('utf-8'))
+	
+def commun_lg(l):
+	"""
+	Fonction qui met en commun les résultats des trois méthodes
+	"""
+	d={'mot':[],'tri':[],'suf':[]}
+	for i in l:
+		for z in i.z:
+			if not z in d['mot']:
+				d['mot'].append(z)
+		for t in i.t:
+			if not t in d['tri']:
+				d['tri'].append(t)
+		for s in i.s:
+			if not s in d['suf']:
+				d['suf'].append(s)
+				
+	return d
+		
+def recup_donnee(lang):
+	"""
+	Donction qui va récupérer la base de données d'une langue
+	"""
+	y=open('donnee_e_'+lang+'/'+lang+'.txt','r')
+	v=json.load(y)
+	y.close()
+	return v
+
+def comp(l1,l2):
+	"""
+	Fonction qui va effectuer la comparaison nécessaire pour le calcul du score
+	"""
+	s=0
+	y=len(l1)
+	for i in l1:
+		try:
+			if l2.has_key(i):
+				s+=1
+		except:
+			if i in l2:
+				s+=1
+	x=float(s)/y
+	return x
+			
+def score(doc1):
+	"""
+	Fonction qui calcule le score
+	"""
+	sc=[]
+	z,t,s=zipf(doc1),trigramme(doc1),suffix(doc1)
+	for i in l_lang:
+		d=recup_donnee(i)
+		dt={}
+		for j in d['tri']:
+			dt.update({j:1})
+		sc+=[{'lang':i,'zipf':comp(z,d['mot']),'trigramme':comp(t,dt),'suffixe':comp(s,d['suf'])}]
+	return sc
+def score_total(lang):
+	"""
+	Fonction qui permet à la fonction analyseur d'afficher plusieurs langues
+	"""
+	x=glob.glob('corpus/test/'+lang+'/*.xml')
+	l_type=['zipf','trigramme','suffixe']
+	print x
+	for i in x:
+		for u in l_type:
+			sc=analyseur(u,i)
+			
+
+def moy_sc(doc1):
+	x=score(doc1)
+	d={}
+	for i in x:
+		t=(i['suffixe']+i['trigramme']+i['zipf'])/3
+		d.update({i['lang']:t})
+	return d
+
+def recup_sc_max(l,typ):
+	"""
+	Fonction qui récupére le score maximum
+	"""
+	p=0
+	lg=''
+	for i in l:
+		if i[typ] > p:
+			p=i[typ]
+			lg=i['lang']
+	x=diag(l,typ)
+	return (lg,p,x)
+
+def analyseur(typ,doc):
+	"""
+	Fonction qui va gérer l'affichage des diagnostiques
+	"""
+	l_type=['zipf','trigramme','suffixe']
+	if typ in l_type:
+		l=score(doc)
+		x=recup_sc_max(l,typ)
+		print 'lang :: '+x[0] +' score :: '+str(x[1]) + ' pertinence :: '+ str(x[2])
+		for j in l:
+			print j['lang'] +' :: '+ str(j[typ])
+	else:
+		print 'error'
+		
+def cont(d_lg,corpus):
+	"""
+	Fonction qui va créer les tableaux de contingences
+	"""
+	x=glob.glob('corpus/'+corpus+'/'+d_lg+'/*.xml')
+	z,s,t=[],[],[]
+	z1,z2,z3,z4=0.0,0.0,0.0,0.0
+	s1,s2,s3,s4=0.0,0.0,0.0,0.0
+	t1,t2,t3,t4=0.0,0.0,0.0,0.0
+	for i in x:
+		lang=re.search('celex.+/?(.+?).xml',i)
+		lg=lang.group(0)
+		lang=re.search('[.]+[a-z]+',lg)
+		lg=lang.group(0)
+		lg=re.sub('[.]','',lg)
+		print 'calcul score'
+		sc=score(i)
+		print'calcul sc max'
+		z+=[recup_sc_max(sc,'zipf')]
+		s+=[recup_sc_max(sc,'suffixe')]	
+		t+=[recup_sc_max(sc,'trigramme')]
+		z1,z2,z3,z4=cont2(lg,z)
+		t1,t2,t3,t4=cont2(lg,t)
+		s1,s2,s3,s4=cont2(lg,s)
+		print z1,z2,z3,z4
+		print t1,t2,t3,t4
+		print s1,s2,s3,s4
+			
+	n=len(x)
+	z1,z2,z3,z4=div(z1,z2,z3,z4,n)
+	s1,s2,s3,s4=div(s1,s2,s3,s4,n)
+	t1,t2,t3,t4=div(t1,t2,t3,t4,n)
+	t,s,z=[t1,t2,t3,t4],[s1,s2,s3,s4],[z1,z2,z3,z4]
+	return (z,s,t)
+def cont2(lg,m):
+	a,b,c,d=0.0,0.0,0.0,0.0
+	for i in m:
+		if i[0] !=lg and not i[2]:
+			d+=1
+		if i[0]==lg and not i[2]:
+			b+=1
+		if i[2] and i[0] == lg:
+			a+=1
+		if i[2] and i[0] != lg:
+			c+=1
+	return a,b,c,d
+def div(a,b,c,d,e):
+	"""
+	Fonction de division pour la fonction de contingence
+	"""
+	a,b,c,d=float(a)/e,float(b)/e,float(c)/e,float(d)/e
+	return a,b,c,d
+
+def rappel(l):
+	"""
+	Fonction qui va calculer le rappel
+	"""
+	try:
+		x=float(l[0])/(l[0]+l[2])
+	except:
+		x=0	
+	return x
+def precision(l):
+	"""
+	Fonction qui va calculer la précision
+	"""
+	try:
+		x=float(l[0])/(l[0]+l[1])
+	except:
+		x=0
+	return x
+
+def f_mesure(r,p):
+	"""
+	Fonction qui va calculer la fonction f-mesure
+	"""
+	try:
+		x=float((2*(r*p)))/(r+p)
+	except:
+		x=0
+	return x
+
+def cmp_score(l):
+	"""
+	Fonction de comparaison pour la fonction diag()
+	"""
+	x=sorted(l,reverse=True)
+	res=(x[0],x[1])
+	return res
+			
+def diag(lds,typ):
+	"""
+	Fonction qui établit le diagnostique
+	"""
+	d={typ:[]}
+	for i in lds:
+		d[typ].append(i[typ])
+	z=cmp_score(d[typ])
+	return z[1]<=(z[0]/1.1)
+
+def pyplot_2():
+	"""
+	Fonction qui va sortir les 3 graphiques nécessaire au compte-rendu
+	"""
+	x=[15.0,30.0,45.0,60.0]
+	for j in xrange(0,3):
+		l1,l2=[],[]
+		for i in xrange(1,5):
+			d=cont(str(i),'entrainement')
+			c1=rappel(d[j])
+			c2=precision(d[j])
+			print (c1,c2)
+			l1.append(c1)
+			l2.append(c2)
+		plt.xlabel('nb de docs')
+		plt.ylabel('Pourcentage')
+		plt.plot(x,l1,color='blue',label=u'Rappel')
+		plt.plot(x,l2,color='red',label=u'Precision')
+		plt.legend(loc='upper right')
+		plt.savefig('o'+str(j)+'.png')
+		plt.close()
+
+def detect_command():
+	"""
+	Fonction qui s'occuppe de l'aquisition et la reconnaissance des requêtes consoles
+	"""
+	x=sys.argv
+	if x:
+		if x[1] == 'zipf':
+			analyseur('zipf',sys.argv[2])
+		if x[1] == 'trig':
+			analyseur('trigramme',sys.argv[2])
+		if x[1] == 'suff':
+			analyseur('suffixe',sys.argv[2])		
+		
+		
+
+
+
+detect_command()
+

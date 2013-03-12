@@ -1,0 +1,516 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import os, sys, re, string, htmlentitydefs, chardet, glob
+import matplotlib.pyplot as plt
+import json
+
+def comp((a,b),(c,d)):
+	return b-d
+
+class Fichier(object):
+	"""
+	Classe fichier qui contiendra toute les méthodes pour traiter 
+	les pages web
+	"""
+	def __init__(self,f):
+		"""
+		Initialise la classe
+		"""
+		self.url=f
+		self.s=""
+		self.encoding=""
+		self.listChaine=[]
+		self.nbmot=0
+		
+	def read_file(self) :
+		"""
+		Méthode qui permet de lire un fichier, prend en entrez l'url 
+		du fichier.
+		"""
+		f = open(self.url, 'r')
+		self.s = f.read()
+		f.close()
+		
+	def source2encoding(self):
+		"""
+		Méthode qui recherche l'encodage de la page web, essaie de 
+		détecter la balise de l'encodage.
+		En cas d'échec utilise la fonction chardet.
+		"""
+		default_encoding = 'iso-8859-1'
+		pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.+?)["\']'
+		pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+		match_charset = re.search(pattern_compiled, self.s)
+		if match_charset :
+			x=chardet.detect(self.s)
+			if string.lower(match_charset.group(1))==x:
+				self.encoding=x['encoding']
+			else :
+				self.encoding=string.lower(match_charset.group(1))
+		else:
+			x=chardet.detect(self.s)
+			self.encoding=x['encoding']	
+			
+	def source2unicode(self):
+		"""
+		Transforme en unicode le texte
+		"""
+		self.s=unicode(self.s,self.encoding)
+		
+	def write_file(self,newfile):
+		"""
+		Permet d'écrire dans un fichier
+		"""
+		f=open(newfile,'w')
+		f.write(self.s)
+		f.close()
+			
+	def clean_unicode_html(self) :
+		"""
+		Méthode qui permet de supprimer les balises inutiles pour le 
+		traitement et remplace les balises de bloc par des '#'
+		"""
+		clean_html = re.sub('&nbsp;', ' ', self.s)
+		clean_html = re.sub('[\s]+', ' ', clean_html)
+
+		pattern1 = re.compile('<script.+?</script>', re.I | re.M)
+		clean_html = pattern1.sub('', clean_html)
+
+		pattern2 = re.compile('<!\-\-.+?\-\->', re.M)
+		clean_html = pattern2.sub('', clean_html)
+
+		pattern3 = re.compile('<select.+?</select>', re.I | re.M)
+		clean_html = pattern3.sub('', clean_html)
+
+		pattern4 = re.compile('<style.+?</style>', re.I | re.M)
+		clean_html = pattern4.sub('', clean_html)
+
+		clean_html = re.sub('(?:&gt;|&lt;)', ' ', clean_html)
+
+		pattern5 = re.compile('[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+		clean_html = pattern5.sub(' # ', clean_html)
+
+		pattern6 = re.compile('\s[#\s]+', re.I | re.M)
+		clean_html = pattern6.sub(' # ', clean_html)
+		
+		pattern7 = re.compile('&eacute',re.I | re.M)
+		clean_html = pattern7.sub(u'é',clean_html)
+		
+		pattern8=re.compile(u'\xea',re.I | re.M)
+		clean_html=pattern8.sub(u'e',clean_html)
+  
+		self.s=clean_html
+
+	def cutBlock(self):
+		"""
+		Permet de découper le texte en bloc et retourne une liste
+		"""
+		x=''
+		for i in self.s:
+			if i!='#':
+				x+=i
+			if i=='#':
+				self.listChaine+=[x]
+				x=''
+	
+	def cutword(self,su):
+		"""
+		Méthode qui prends en entré une chaine de caractère et retourne 
+		la liste des mots de la chaine
+		"""
+		l=[]
+		s=""
+		for i in su:
+			if i!=' ':
+				s+=i
+			else:
+				l+=[s]
+				s=''
+		l+=[s]
+		return l		
+		
+	def get_mot(self):
+		"""
+		Méthode qui prends en entré le nombre n de mot à la suite à 
+		retourner. Retourne dans un dictionnaire la liste des tuples.
+		"""
+		d={}
+		for su in self.listChaine:
+			lw=self.cutword(su)
+			len_w=len(lw)
+			for i in xrange(len_w-1):
+				lngram=lw[i:i+1]
+				ngram=lngram[0]
+				if ngram not in d:
+					d[ngram]=0
+				d[ngram]+=1
+		return d
+				
+	def get_n_carac(self,n):
+		"""
+		Méthode qui renvoi les ngram de caractère dans un dictionnaire 
+		de tuples
+		"""
+		d={}
+		for su in self.listChaine:
+			lw=self.cutword(su)
+			for c in lw:
+				len_c=len(c)
+				for i in xrange(len_c-n):
+					lngram=c[i:i+n]
+					ngram=tuple(lngram)
+					if ngram not in d:
+						d[ngram]=0
+					d[ngram]+=1
+		return d
+		
+	def effectif(self,l):
+		"""
+		Renvoi le rapport entre le nombre de mots différents 
+		et le nombre de mot total.
+		"""
+		res=0
+		for i in l:
+			res+=i[1]
+		print res,len(l)
+		res=res/float(len(l))
+		print res
+		
+	def filter_dict(self,d):
+		"""
+		Méthode qui permet de renvoyer un dictionnaire filtré 
+		des clé inférieur à une lettre
+		"""
+		filtared_d={}
+		for k,v in d.iteritems():
+			if v>1:
+				filtared_d[k]=v
+			return filtared_d
+
+	def get_all_trigram(self):
+		"""
+		Méthode qui créer un dictionnaire avec tout les 
+		ngram de mots possibles
+		"""
+		d={}
+		n=3
+		b=True
+		while b:
+			dng=self.get_n_mot(n)
+			f_dng=self.filter_dict(dng)
+			b=not(f_dng=={})
+			d.update(dng)
+		return d
+		
+	def get_all_trigram2(self):
+		"""
+		Méthode qui créer un dictionnaire avec tout les 
+		ngram de caractère possibles
+		"""
+		d={}
+		n=3
+		b=True
+		while b:
+			dng=self.get_n_carac(n)
+			f_dng=self.filter_dict(dng)
+			b=not(f_dng=={})
+			d.update(dng)
+		return d
+	
+	def seg_trigrame(self):
+		"""
+		Fonction qui découpe la chaine de caractère en trigramme.
+		Renvoie un dictionnaire.
+		"""
+		d={}
+		for i in self.listChaine:
+			for j in xrange(0,len(i)-2):
+				trigram=i[j:j+3]
+				if trigram not in d:
+					d[trigram]=0
+				d[trigram]+=1
+		return d
+		
+	
+	def seg_suffixe(self):
+		"""
+		Decoupe la chaine de caractère en suffixe
+		Renvoi un dictionnaire
+		"""
+		d={}
+		x=self.cutword(self.s)
+		for i in x:
+			if len(i)<=3:
+				suf=i
+				if suf not in d:
+					d[suf]=0
+				d[suf]+=1
+			else:
+				suf=i[-3:]
+				if suf not in d:
+					d[suf]=0
+				d[suf]+=1
+		return d
+	
+def make_database(*args):
+	"""
+	Creer base de donnee prend en argument des dictionnaires
+	Retourne un dictionnaire
+	"""
+	dic={}
+	l=[]
+	r=['tri','mot','suf']
+	y=0
+	for z in args:
+		x=z.items()
+		x.sort(reverse=True,cmp=comp)
+		for i in xrange(0,15):
+			l+=[x[i][0]]
+		dic[r[y]]=l
+		y+=1
+	return dic
+	
+			
+def save_database(dico,cible):
+	"""
+	Prend un dictionnaire en entree et ecris le dictionnaire dans un fichier
+	"""
+	database=open(cible, 'w')
+	database.write(json.dumps(dico))
+	database.close()
+	
+def load_database(cible):
+	"""
+	Prend en entree le chemin du fichier.
+	Retourne le dictionnaire
+	"""
+	database=open(cible ,'r' )
+	u=json.load(database)
+	database.close()
+	return u
+
+def add_dico(dic,dic2):
+	"""
+	Fonction qui permet d'ajouter des dictionnaire
+	"""
+	ldic=dic2.keys()
+	ndic={}
+	for i in ldic:
+		if dic.has_key(i):
+			ndic[i]=dic[i]+dic2[i]
+		else:
+			ndic[i]=dic2[i]
+	return ndic
+
+def database(path,langue):
+	"""
+	Fonction qui créer tout les base de données en une seul fois
+	"""
+	alla={}
+	allx={}
+	allmot={}
+	for i in xrange(1,15):
+		fichier=Fichier(path+str(i)+'.xml')
+		fichier.read_file()
+		fichier.source2encoding()
+		fichier.source2unicode()
+		fichier.clean_unicode_html()
+		fichier.cutBlock()
+		x=fichier.seg_trigrame()
+		a=fichier.seg_suffixe()
+		mot=fichier.get_mot()
+		alla=add_dico(alla,a)
+		allx=add_dico(allx,x)
+		allmot=add_dico(allmot,mot)
+	res=make_database(allx,allmot,alla)
+	j=save_database(res,"database"+langue+".txt")
+	j=load_database("database"+langue+".txt")
+
+def compareTexte(path,methode):
+	"""
+	Fonction qui permet de tester un texte, prend en entree le chemin du fichier et la methode.
+	"""
+	ftest={}
+	d={}
+	z=0
+	res=[]
+	fichier=Fichier(path)
+	fichier.read_file()
+	fichier.source2encoding()
+	fichier.source2unicode()
+	fichier.clean_unicode_html()
+	fichier.cutBlock()
+	if methode=='tri':
+		ftest=fichier.seg_trigrame()
+	elif methode=='suf':
+		ftest=fichier.seg_suffixe()
+	else:
+		ftest=fichier.get_mot()
+	for i in ['de','en','es','fr','lt','nl']:
+		d=load_database('database'+i+'.txt')
+		liste=d[methode]
+		res.append(0)
+		for j in ftest.keys():
+			if j in liste:
+				res[z]+=1
+		res[z]=(i,res[z]/float(len(liste)))
+		z+=1
+	return res
+	
+def testLangue(l):
+	"""
+	Fonction qui retourne la langue du texte ou dit si elle est indeterminable
+	"""
+	test=[(0,0),(0,0)]
+	res=(0,0,False)
+	impossible=True
+	pertinent=False
+	x=0
+	for i in l:
+		if i[1]>0.15:
+			impossible=False
+		if i[1] > test[0][1]:
+			test[1]=test[0]
+			test[0]=(i[0],i[1])
+			res=(i[0],i[1],False)
+		if i[1]>test[1][1] and i[1]<test[0][1]:
+			test[1]=(i[0],i[1])
+			
+	x=(test[0][1]/test[1][1])
+	if x<1.50:#pertinent si entre le premier et deuxième il y a plus de 1/2
+		pertinent=True
+		res=(test[0][0],test[0][1],pertinent)
+	if impossible:
+		res=('Indetermine',test[0][1],pertinent)
+	
+	return res
+	
+def cont(tab,res):
+	"""
+	Fonction ajoute des resultat a la table de contingence 
+	"""
+	if res[0]!='Indetermine':
+		if res[2]==True:
+			tab[0][0]+=1
+			tab[0][2]+=1
+			tab[2][0]+=1
+		else:
+			tab[1][0]+=1
+			tab[1][2]+=1
+			tab[2][0]+=1
+	else:
+		if res[2]:
+			tab[0][1]+=1
+			tab[0][2]+=1
+			tab[2][1]+=1
+		else:
+			tab[1][1]+=1
+			tab[1][2]+=1
+			tab[2][1]+=1
+	tab[2][2]+=1
+	return tab
+	
+def statistique(tab):
+	"""
+	Fonction qui creer les statistiques à partir de la table de contingence
+	"""
+	print tab
+	a=tab[0][0]
+	ab=tab[2][0]
+	ac=tab[0][2]
+	if ab!=0:
+		rappel=a/float(ab)
+	else:
+		rappel=0.0
+	if ac!=0:
+		precision=a/ac
+	else:
+		precision=0
+	if rappel+precision!=0:
+		fmesure=2*(rappel*precision)/(rappel+precision)
+	else:
+		fmesure=0
+	return (rappel,precision,fmesure)
+	
+def makeTabAll(arg):
+	"""
+	Fonction qui créer tout les tables de contingences et les statistiques.
+	Retourne la table et ses stats.
+	"""
+	tabCont=[[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]
+	for i in ['de','en','es','fi','fr','it','lt','lv','nl','pt']:
+		for f in xrange(1,10):
+			x=compareTexte('Corpus_test/'+i+'/'+str(f)+'.xml',arg)
+			lang=testLangue(x)
+			tabCont=cont(tabCont,lang)
+	stat=statistique(tabCont)
+	return (tabCont,stat)
+	
+def makeTabAll2(arg,name):
+	"""
+	Fonction qui permet de créer les tables de contingences pour les test
+	"""
+	tabCont=[[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]
+	statgraph=[]
+	statgraph2=[]
+	for i in [15,30,45,60]:
+		for f in xrange(1,i):
+			x=compareTexte('tranche_de_15/'+str(i)+'/'+str(f)+'.xml',arg)
+			lang=testLangue(x)
+			tabCont=cont(tabCont,lang)
+		stat=statistique(tabCont)
+		statgraph+=[[x for x in stat]]
+		statgraph2+=[i]
+	create_graph(statgraph,statgraph2,name)
+	return (tabCont,stat)
+	
+def create_graph(stat,stat2,name):
+	"""
+	Fonction qui créer les graphs à partirs des statistiques
+	"""
+	o1=[]
+	o2=[]
+	o3=[]
+	print stat,stat2
+	for x in stat:
+		o1+=[x[0]]
+		o2+=[x[1]]
+		o3+=[x[2]]
+	plt.xlabel('Nombre de texte')
+	plt.ylabel('Score')
+	plt.title('Test par '+name)
+	plt.plot(stat2,o1)
+	plt.plot(stat2,o2)
+	plt.plot(stat2,o3)
+	plt.savefig(name+'.png')
+	plt.close()
+
+def testTranche():
+	"""
+	Fonction qui lance la fonction makeTabAll2 pour chaque type de recherche
+	"""
+	res=[]
+	statrappel=[]
+	statprecision=[]
+	for i in ['suf','tri','mot']:
+		x=makeTabAll2(i,i)
+		res.append(x)
+		
+def tabCont(arg):
+	"""
+	Creer une table de contingence
+	"""
+	tabCont=[[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]
+	x=compareTexte(arg[1],arg[2])
+	lang=testLangue(x)
+	tabCont=cont(tabCont,lang)
+	print tabCont
+	
+if __name__ == '__main__':
+	arg=sys.argv
+	x=compareTexte(arg[1],arg[2])
+	lang=testLangue(x)
+	print x
+	print 'La langue la plus probable est : "'+lang[0]+'" avec un score de '+str(lang[1])+', pertinent : '+str(lang[2])
+	

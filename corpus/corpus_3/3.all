@@ -1,0 +1,613 @@
+import sys
+import re
+import glob
+
+
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def dict_count(d, k) :
+  if(d.has_key(k)) :
+    d[k] += 1
+  else :
+    d[k] = 1
+
+
+def clean_it(html):
+	pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+ 	clean_html = pattern5.sub(u'',html)
+	return clean_html
+
+def get_list_words(html_unicode) :
+  pattern_word = u'[^\s\d".?#;,:\(\)$\/%\[\]&\|_><-@]+\'?[^\s\d".?#;,:\(\)$\/%\[\]\|&_><-@]+'
+  pattern_word_compiled = re.compile(pattern_word, re.I | re.M)
+  list_words = pattern_word_compiled.findall(html_unicode)
+  return list_words
+
+def list_words2dict_effectif(list_words_unicode) :
+  dict_effectif = {}
+  for graphie in list_words_unicode :
+    dict_count(dict_effectif, graphie)
+  return dict_effectif
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l, reverse=True)
+  return l
+
+def segmenteur_zipf(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  l = get_list_words(html)
+  d = list_words2dict_effectif(l)
+  #z = dict_effectif2distrib_zipf(d)
+
+  it = d.items()
+  def cmpval(x,y) :
+    return y[1] - x[1]
+  it.sort(cmpval)
+ 
+#  res=[]
+#  for s_unicode,eff in it:
+#    s_utf8 = s_unicode.encode('utf-8')
+#    res.append((s_utf8,eff))
+  return it
+
+def segmenteur_suffix(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  l = get_list_words(html)
+  d = list_words2dict_effectif(l)
+
+  it = d.items()
+  def cmpval(x,y) :
+    return y[1] - x[1]
+  it.sort(cmpval)
+   	
+  return it
+
+def segmenteur_trigram(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  x,y,z = 0,1,2
+  ponct=[',',':',';',"'",'.','%','(',')','"','[',']','}','{','/','-',"\t"]
+  tri=[]
+  while z < len(html):
+	if html[x] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	elif html[y] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	elif html[z] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	else:
+		tri+=[html[x]+html[y]+html[z]]
+		x+=1
+		y+=1
+		z+=1
+  return tri
+
+
+def create_res_zipf(path_folder,amount):
+    		z=folder
+    		d = {}
+    		cpt = 0
+		print "Creating Ressources for",z[-2:]
+    		for name in glob.glob('%s/*'%(path_folder)) :
+      			if cpt > 6000 :
+        			break
+      			outputzipf = segmenteur_zipf(name)
+      			for e,v in outputzipf :
+        			if e in d :
+          				d[e] += v
+        			else :
+          				d[e] = v
+      				cpt += 1
+
+    		it = d.items()
+    		def cmpval(x,y) :
+      			return y[1] - x[1]
+    		it.sort(cmpval)
+  
+   		res=[]
+    		for s_unicode,eff in it:
+     			s_utf8 = s_unicode.encode('utf-8')
+      			res.append((s_utf8,eff))
+   		s_out = ''
+    		for x,y in res:
+      			s_out += '%s\t%i\n'%(x,y)
+   		write_file('ressource_zipf_%s_%s.txt'%(z[-2:],path_folder[-2:]), s_out)
+
+def create_res_suffix(path_folder,amount):
+    z=folder
+    print "Creating Suffix File for ", z[-2:]
+    d = {}
+    cpt = 0
+    for name in glob.glob('%s/*'%(path_folder)):
+      if cpt > 250 :
+        break
+      suffix_it = segmenteur_suffix(name)
+      s_out = ''
+      for e,v in suffix_it :
+	  if len(e)>3:
+            if e[-3:] in d :
+              d[e[-3:]] += v
+            else :
+              d[e[-3:]] = v
+      cpt += 1
+
+    it = d.items()
+    def cmpval(x,y) :
+      return y[1] - x[1]
+    it.sort(cmpval)
+  
+    res=[]
+    for s_unicode,eff in it:
+      s_utf8 = s_unicode.encode('utf-8')
+      res.append((s_utf8,eff))
+
+    for x,y in res:
+      s_out += '%s\t%i\n'%(x,y)
+    write_file('ressource_suffix_%s_%s.txt'%(z[-2:],path_folder[-2:]), s_out)
+	
+
+def create_res_trigram(path_folder,amount):
+		d={}
+		cpt = 0
+		z=folder
+		print "Creating Trigram File for ", z[-2:]
+		for name in glob.glob('%s/*'%(path_folder)):
+    			if cpt > 50 :
+      				break
+    			outputzipf = segmenteur_trigram(name)
+			s_out = ''
+			for x in outputzipf:
+				if d.has_key(x):
+					d[x]+=1
+				else:
+					d[x]=1
+			cpt+=1
+
+		it = d.items()
+		def cmpval(x,y) :
+			return y[1] - x[1]
+		it.sort(cmpval)
+  
+		res=[]
+  		for s_unicode,eff in it:
+    			s_utf8 = s_unicode.encode('utf-8')
+    			res.append((s_utf8,eff))
+
+  		for x,y in res:
+    			s_out += '%s\t%i\n'%(x,y)
+ 		write_file('ressource_trigram_%s_%s.txt'%(z[-2:],path_folder[-2:]), s_out)
+
+
+if  __name__=='__main__' :
+	path_folder = sys.argv[1]
+	res_type = sys.argv[2]
+	if res_type == 'zipf' :
+		for folder in glob.glob('%s/*'%(path_folder)):
+			for amount in glob.glob('%s/*'%(folder)):
+				create_res_zipf(amount,folder)
+	elif res_type == 'suffix' :
+		for folder in glob.glob('%s/*'%(path_folder)):
+			for amount in glob.glob('%s/*'%(folder)):
+				create_res_suffix(amount,folder)
+	elif res_type == 'trigram' :
+		for folder in glob.glob('%s/*'%(path_folder)):
+			for amount in glob.glob('%s/*'%(folder)):
+				create_res_trigram(amount,folder)
+	else :
+		print 'no res type'
+  
+
+
+
+
+
+import sys
+import re
+import glob
+import time
+import matplotlib.pyplot as plt
+
+
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def readlines_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.readlines()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def dict_count(d, k) :
+  if(d.has_key(k)) :
+    d[k] += 1
+  else :
+    d[k] = 1
+
+
+def clean_it(html):
+	pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+ 	clean_html = pattern5.sub(u'',html)
+	return clean_html
+
+def get_list_words(html_unicode) :
+  pattern_word = u'[^\s\d\'".?;,:!\(\)\[\]\|]+'
+  pattern_word_compiled = re.compile(pattern_word)
+  list_words = pattern_word_compiled.findall(html_unicode)
+  return list_words
+
+def list_words2dict_effectif(list_words_unicode) :
+  dict_effectif = {}
+  for graphie in list_words_unicode :
+    dict_count(dict_effectif, graphie)
+  return dict_effectif
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l, reverse=True)
+  return l
+
+def segmenteur_zipf(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  l = get_list_words(html)
+  d = list_words2dict_effectif(l)
+
+  it = d.items()
+  def cmpval(x,y) :
+    return y[1] - x[1]
+  it.sort(cmpval)
+ 
+  return it
+
+def segmenteur_suffix(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  l = get_list_words(html)
+  d = list_words2dict_effectif(l)
+
+  it = d.items()
+  def cmpval(x,y) :
+    return y[1] - x[1]
+  it.sort(cmpval)
+   	
+  return it
+
+def segmenteur_trigram(path_file) :
+  s = unicode(read_file(path_file),'utf-8')
+  html = clean_it(s)
+  x,y,z = 0,1,2
+  ponct=[',',':',';',"'",'.','%','(',')','"','[',']','}','{','/','-',"\t"]
+  tri=[]
+  while z < len(html):
+	if html[x] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	elif html[y] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	elif html[z] in ponct:
+		x+=1
+		y+=1
+		z+=1
+	else:
+		tri+=[html[x]+html[y]+html[z]]
+		x+=1
+		y+=1
+		z+=1
+  return tri
+
+def data_extract(type_analyse,lg,pert):
+	if type_analyse == 'zipf':
+		name="res/zipf/%s/ressource_zipf_%s_%s.txt"%(pert,lg,pert)
+		reading_file=readlines_file(name)
+		words={}
+		words_pert={}
+		for i in range(len(reading_file)):
+			indice=0
+			eff=""
+			for y in range(len(reading_file[i])):
+				if reading_file[i][y] == "\t":
+					indice=y
+					eff=reading_file[i][indice+1:(len(reading_file[i])-1)]
+					words[reading_file[i][:indice]]=eff
+		for x in words:
+			if 2 <= len(x) < 5:
+				if int(words[x]) > 50:
+					words_pert[x]=words[x]
+		return words_pert
+
+
+	elif type_analyse == 'suffix':
+
+		name="res/suffix/%s/ressource_suffix_%s_%s.txt"%(pert,lg,pert)
+		reading_file=readlines_file(name)
+		words={}
+		words_pert={}
+		for i in range(len(reading_file)):
+			indice=0
+			eff=""
+			for y in range(len(reading_file[i])):
+				if reading_file[i][y] == "\t":
+					indice=y
+					eff=reading_file[i][indice+1:(len(reading_file[i])-1)]
+					words[reading_file[i][:indice]]=eff
+		for x in words:
+			if len(x) < 5 and int(words[x]) > 500:
+				words_pert[x]=words[x]
+		return words_pert
+
+	else:
+
+		name="res/trigram/%s/ressource_trigram_%s_%s.txt"%(pert,lg,pert)
+		reading_file=readlines_file(name)
+		words={}
+		words_pert={}
+		for i in range(len(reading_file)):
+			indice=0
+			eff=""
+			for y in range(len(reading_file[i])):
+				if reading_file[i][y] == "\t":
+					indice=y
+					eff=reading_file[i][indice+1:(len(reading_file[i])-1)]
+					words[reading_file[i][:indice]]=eff
+		for x in words:
+			if len(x) < 5 and int(words[x]) > 500:
+				words_pert[x]=words[x]
+		return words_pert
+
+def test_it(dic,word,num):
+	if word in dic:
+		score=1
+	else:
+		return 0
+	return score
+	
+def analyseur_zipf(zipf_file,res_folder_zipf,pert):
+	score_board={}
+	for doc in glob.glob('res/%s/%s/*'%(res_folder_zipf,pert)):
+		lg=doc[-9:-7]
+		words=data_extract(res_folder_zipf,lg,pert)
+		score=0
+		score_board[lg]=0
+		for w,n in zipf_file:
+			score_board[lg]+=test_it(words,w,n)
+
+	score_board_order = score_board.items()
+	def cmpval(x,y) :
+		return y[1] - x[1]
+	score_board_order.sort(cmpval)
+
+	
+	if score_board_order[0][1] > (score_board_order[1][1]*2):
+		print "Ce document est surement ecrit en", score_board_order[0][0]
+	elif score_board_order[0][1] < (score_board_order[1][1]*2):
+		print "Ce document est ecrit en", score_board_order[0][0], "cela n'est pas exacte a 100%"
+	else:
+		print "Langue non retrouver"
+
+	return score_board_order
+
+			
+		
+		
+	
+
+def analyseur_suffix(suffix_file,res_folder_suff,pert):
+	score_board={}
+	for doc in glob.glob('res/%s/%s/*'%(res_folder_suff,pert)):
+		lg=doc[-9:-7]
+		words=data_extract(res_folder_suff,lg,pert)
+		score=0
+		score_board[lg]=0
+		for w in suffix_file:
+			score_board[lg]+=test_it(words,w,suffix_file[w])
+	score_board_order = score_board.items()
+	def cmpval(x,y) :
+		return y[1] - x[1]
+	score_board_order.sort(cmpval)
+	
+	if score_board_order[0][1] > (score_board_order[1][1]*2):
+		print "Ce document est surement ecrit en", score_board_order[0][0]
+	elif score_board_order[0][1] < (score_board_order[1][1]*2):
+		print "Ce document est ecrit en", score_board_order[0][0], "cela n'est pas exacte a 100%"
+	else:
+		print "Langue non retrouver"
+
+	return score_board_order
+
+def analyseur_trig(trig_file,res_folder_tri,pert):
+	score_board={}
+	for doc in glob.glob('res/%s/%s/*'%(res_folder_tri,pert)):
+		lg=doc[-9:-7]
+		words=data_extract(res_folder_tri,lg,pert)
+		score=0
+		score_board[lg]=0
+		for w in trig_file:
+			score_board[lg]+=test_it(words,w,trig_file[w])
+	score_board_order = score_board.items()
+	def cmpval(x,y) :
+		return y[1] - x[1]
+	score_board_order.sort(cmpval)
+	
+	if score_board_order[0][1] > (score_board_order[1][1]*2):
+		print "Ce document est surement ecrit en", score_board_order[0][0]
+	elif  score_board_order[0][1] < (score_board_order[1][1]*2):
+		print "Ce document est ecrit en", score_board_order[0][0], "cela n'est pas exacte a 100%"
+	else:
+		print "Langue non retrouver"
+		
+
+	return score_board_order
+
+if  __name__=='__main__' :
+	path_file= sys.argv[1]
+	type_analyse= sys.argv[2]
+	if type_analyse == 'zipf':
+		gr_l=[]
+		score_t=0
+		score_g=[]
+		for x in [15,30,45,60]:
+			a=0
+			b=0
+			c=0
+			d=0
+			pert=x
+			for files in glob.glob('%s/*'%(path_file)):
+				score_1=0
+				zipf_it=segmenteur_zipf(files)
+				score=analyseur_zipf(zipf_it,type_analyse,pert)
+				score_1+=score[0][1]
+				if score[0][0].lower() == files[-6:-4]:
+					if score[0][1] > (score[1][1]*2):
+						a+=1
+					else:
+						b+=1
+				else:
+					if score[1][0].lower() == files[-6:-4]:
+						if score[1][1] < (score[0][1]*2):
+							c+=1
+					elif score[2][0].lower() == files[-6:-4]:
+						if score[2][1] < (score[0][1]*2):
+							c+=1
+					else:
+						d+=1
+				score_t+=score_1
+			score_g.append(score_t/60)
+			gr_l.append(a)
+			print a, b, c, d
+		plt.figure(1)
+		p1=plt.plot([15,30,45,60],score_g,'-')
+		plt.ylabel("score_moy")
+		plt.xlabel("res_nombre")
+		plt.savefig('GraphZipf.png')
+
+	elif type_analyse == 'suffix':
+		gr_l=[]
+		score_t=0
+		score_g=[]
+		for x in [15,30,45,60]:
+			a=0
+			b=0
+			c=0
+			d_2=0
+			pert=x
+			for files in glob.glob('%s/*'%(path_file)):
+				score_1=0
+				suffix_it=segmenteur_suffix(files)
+				d={}
+				for e,v in suffix_it :
+			  		if len(e)>3:
+			    			if e[-3:] in d :
+			      				d[e[-3:]] += v
+			    			else :
+			     				d[e[-3:]] = v
+				score=analyseur_suffix(d,type_analyse,pert)
+				score_1+=score[0][1]
+				if score[0][0].lower() == files[-6:-4]:
+					if score[0][1] > (score[1][1]*2):
+						a+=1
+					else:
+						b+=1
+				else:
+					if score[1][0].lower() == files[-6:-4]:
+						if score[1][1] < (score[0][1]*2):
+							c+=1
+					elif score[2][0].lower() == files[-6:-4]:
+						if score[2][1] < (score[0][1]*2):
+							c+=1
+					else:
+						d_2+=1
+				score_t+=score_1
+			score_g.append(score_t/60)
+			gr_l.append(a)
+			print a, b, c, d_2
+		plt.figure(2)
+		p1=plt.plot([15,30,45,60],score_g,'-')
+		plt.ylabel("score_moy")
+		plt.xlabel("res_nombre")
+		plt.savefig('GraphSuff.png')
+	elif type_analyse == 'trigram':
+		gr_l=[]
+		score_t=0
+		score_g=[]
+		for x in [15,30,45,60]:
+			a=0
+			b=0
+			c=0
+			d_2=0
+			pert=x
+			for files in glob.glob('%s/*'%(path_file)):
+				score_1=0
+				tri_it=segmenteur_trigram(files)
+				d={}
+				for x in tri_it:
+					if d.has_key(x):
+						d[x]+=1
+					else:
+						d[x]=1
+				score=analyseur_trig(d,type_analyse,pert)
+				score_1+=score[0][1]
+				if score[0][0].lower() == files[-6:-4]:
+					if score[0][1] > (score[1][1]*2):
+						a+=1
+					else:
+						b+=1
+				else:
+					if score[1][0].lower() == files[-6:-4]:
+						if score[1][1] < (score[0][1]*2):
+							c+=1
+					elif score[2][0].lower() == files[-6:-4]:
+						if score[2][1] < (score[0][1]*2):
+							c+=1
+					else:
+						d_2+=1
+				score_t+=score_1
+			score_g.append(score_t/60)
+			gr_l.append(a)
+			print a, b, c, d_2
+		plt.figure(3)
+		p1=plt.plot([15,30,45,60],score_g,'-')
+		plt.ylabel("score_moy")
+		plt.xlabel("res_nombre")
+		plt.savefig('Graphtri.png')
+	else:
+		print "Don't know what you want..."
+
+  
+
+
+
+
+

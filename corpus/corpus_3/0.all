@@ -1,0 +1,381 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import re, string, htmlentitydefs
+
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def list2ul(l) :
+  s = ''
+  for e in l :
+    s += '<li>%s</li>'%(e)
+  return '<ul>%s</ul>'%s
+
+def dict2ul(d) :
+  s = ''
+  for k,e in d.iteritems() :
+    s += '<li>%s :: %s</li>'%(str(k),str(e))
+  return '<ul>%s</ul>'%s
+
+def dict_count(d, k) :
+  if(d.has_key(k)) :
+    d[k] += 1
+  else :
+    d[k] = 1
+
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def source2encoding(s) :
+  default_encoding = 'iso-8859-1'
+  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+  if match_charset :
+    encoding = string.lower(match_charset.group(1))
+    #print 'detected charset ::', encoding.encode('utf-8')
+  else :
+    encoding = default_encoding
+    #print 'undetected charset, use default encoding ::', default_encoding
+  return encoding
+
+def clean_unicode_html(s_unicode) :
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' # ', clean_html)
+
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+  
+  return clean_html
+
+def decode_html_entities(s_unicode) :
+  html = re.sub(u'&#([0-9]+);', replace_num_entities, s_unicode)
+  pattern = re.compile(u'&([a-z]+);', re.I)
+  html = pattern.sub(replace_alpha_entities, html)
+  return html
+
+def replace_num_entities(matchobj_unicode) :
+  if int(matchobj_unicode.group(1)) in range(65535):
+    return unichr(int(matchobj_unicode.group(1)))
+  else:
+    return u'&#%s;'%(matchobj_unicode.group(1))
+
+def replace_alpha_entities(matchobj_unicode) :
+  k = matchobj_unicode.group(1)
+  if not htmlentitydefs.entitydefs.has_key(k) :
+    if k.isupper() :
+      k = string.lower(matchobj_unicode.group(1))
+      if not htmlentitydefs.entitydefs.has_key(k) :
+        return ''
+    else :
+      return ''
+  if len(htmlentitydefs.entitydefs[k]) == 1 :
+    car = htmlentitydefs.entitydefs[k]
+    return unicode(car, 'iso-8859-1')
+  else :
+    str_code = htmlentitydefs.entitydefs[k].strip(u'&#;')
+    return unichr(int(str_code))
+
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+
+##################################
+##		MODULES UTILISEES		##
+##################################
+import re
+import os
+import sys
+import csv
+import glob
+##import matplotlib.pyplot as pyplot
+import tool_ltal as tl
+import operator
+import json
+###################################
+
+
+File='CorpusEntrainement/Fr/celex_IP-04-9.fr.xml'
+types=['mots','trigram','suffixe']
+langues=['De','En','Es','Fr','Lt','Nl']
+
+
+def get_header_html() :
+	s = '''
+	<html>
+		<head>
+			<meta http-equiv="Content-Type"
+				content="text/html; charset=utf-8">
+			<title>Titre</title>
+		</head>
+		<body>
+	'''
+	return s
+
+def get_footer_html() :
+	s = '''
+	</body>
+	</html>
+	'''
+	return s
+
+def prepare_file(path_file) :
+	src_html = tl.read_file(path_file)
+	encoding_detected = tl.source2encoding(src_html)
+	src_html_unicode = unicode(src_html,encoding_detected)
+	src_html_unicode = tl.clean_unicode_html(src_html_unicode)
+	src_html_unicode = tl.decode_html_entities(src_html_unicode)
+	pat=re.compile (u'[\d . ? , ! : ; / " ( ) \ £ $ € | * = + { } ² < > ° @ • _ % - #]+')
+	src_html_unicode = pat.sub(u' ',src_html_unicode)
+	return src_html_unicode
+
+def get_list_words(html_unicode) :
+	pattern_word = u'[^ \d \s . ? , ! : ; / " ( ) \ £ $ € | * = + { } ² < > ° @ • _ % - #]+'
+	pattern_word_compiled = re.compile(pattern_word)
+	list_words = pattern_word_compiled.findall(html_unicode)
+	return list_words
+
+def seg_suffixe(chaine):
+	res=[]
+	for mot in chaine.split():
+		if len(mot)<3:
+			res+=[mot]
+		else:
+			res+=[mot[-3:]]
+	return res
+
+			
+def createRessourceFile(lang,dico,Type):
+	dico2={}
+	for k,v in dico.iteritems():
+		dico2[k.encode('utf-8')]=v
+	json.dump(dico2,open("ressource/%s/%s.txt" %(Type,lang),'w')) 
+
+def append(dico1,dico2):
+	for key in dico2:
+		if key in dico1:
+			dico1[key]+=dico2[key]
+		else:
+			dico1[key]=dico2[key]
+	return dico1
+
+	
+def counter(liste):
+	dico={}
+	for elmt in liste:
+		if elmt not in dico:
+			dico[elmt]=0
+		dico[elmt]+=1
+	return dico
+
+	
+def seg_trigram(source):
+	res=[]
+	for i in range(0,len(source)-2):
+		res+=[source[i]+source[i+1]+source[i+2]]
+		i+=1
+	return res
+
+def filtrer(dico):
+	total=0
+	seuil=0
+	for k,v in dico.iteritems():
+		total+=v
+	
+	seuil=total*(0.001)
+	new={}
+	for k,v in dico.iteritems():
+		if v>seuil:
+			new[k]=v
+			
+	return new
+
+	
+def automate(lang,Type):
+	print 'Creating %s file for %s \b' %(Type,lang)
+	d={}
+	for fich in glob.glob('Input/%s/60/*.xml'%(lang)): #C'EST ICI QU'IL FAUT MODIF POUR CHANGER LA TAILLE DU CORPUS POUR GENERER LES FICHIERS RES
+		if Type=='mots':
+			append(d,counter(get_list_words(prepare_file(fich))))
+		elif Type=='trigram':
+			append(d,counter(seg_trigram(prepare_file(fich))))
+		elif Type=='suffixe':
+			append(d,counter(seg_suffixe(prepare_file(fich))))
+			
+	d=filtrer(d)
+	createRessourceFile(lang,d,Type)
+	print 'Done'
+
+if __name__=='__main__':
+	lang=sys.argv[2]
+	Type=sys.argv[1]
+	
+	
+	if Type=='all':
+		for i in types:
+			for l in langues:
+				automate(l,i)
+		
+	else:
+		automate(lang,Type)
+
+  
+  
+##################################
+##		MODULES UTILISEES		##
+##################################
+import re
+import os
+import sys
+import csv
+import glob
+##import matplotlib.pyplot as pyplot
+import tool_ltal as tl
+import operator
+import json
+import tp3
+###################################
+dico3={'De':0,'En':0,'Es':0,'Fr':0,'Lt':0,'Nl':0}
+
+
+def compare(dico1,dico2,Type):
+	score=0
+	for k,v in dico1.iteritems():
+		if k in dico2:
+				
+			score+=1
+	return score
+
+def importJson(File):
+	return json.loads(open(File,'r').read())
+	
+def createScores(Type,dico1):
+	results={}
+	for lang in tp3.langues:
+		dico2=importJson('ressource/%s/%s.txt' %(Type,lang))
+		results[lang]=compare(dico1,dico2,Type)
+	return results
+
+def findLang(liste):
+	tmpL,tmpM,near="",0,""	
+	if liste[0][1]>=(liste[1][1])*2:
+		tmpL=liste[0][0]
+	else:
+		near=liste[0][0]
+	return tmpL,near
+
+def final(d,nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux,doc):
+        d=tp3.filtrer(d)
+        dScore=createScores(Type,d)
+        dScored = sorted(dScore.iteritems(), reverse=True, key=operator.itemgetter(1))
+
+        print dScore
+
+        lang,near=findLang(dScored)
+        #for fich in glob.glob('CorpusTest\%s\*.xml'%(lang)):
+                #print fich
+        if lang=="":
+                print "Je n'ai pas pu determiner la langue du document, mais il se raproche le plus du %s" %(near)
+                if langue(doc)==near.lower():
+                        nb_docs_rbons+=1
+                if langue(doc)!=near.lower():
+                        nb_docs_rfaux+=1
+        else:
+                print 'Le langage du document est %s' %(lang.encode('utf-8'))
+                if langue(doc)==lang.lower():
+                        nb_docs_bons+=1
+                if langue(doc)!=lang.lower():
+                        nb_docs_faux+=1
+                        
+        return nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux
+                                    
+def cmpval(x,y):
+	return y[1]-x[1]
+
+def langue(chem):
+  chem=chem.split("/")
+  for x in chem:
+    if "." in x:
+      x=x.split(".")
+      return x[-2][0:2]
+
+		
+def automate(Type,doc):
+        nb_docs_bons=0
+        nb_docs_faux=0
+        nb_docs_rbons=0
+        nb_docs_rfaux=0
+        print 'Test du document %s, avec la methode %s' %(doc,Type)
+        d={}
+        if Type=='mots':
+                        tp3.append(d,tp3.counter(tp3.get_list_words(tp3.prepare_file(doc))))
+                        nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux=final (d,nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux,doc)
+        elif Type=='trigram':
+                        tp3.append(d,tp3.counter(tp3.seg_trigram(tp3.prepare_file(doc))))
+                        nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux=final(d,nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux,doc)
+        elif Type=='suffixe':
+                        tp3.append(d,tp3.counter(tp3.seg_suffixe(tp3.prepare_file(doc))))
+                        nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux=final(d,nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux,doc)
+
+        return nb_docs_bons,nb_docs_faux,nb_docs_rbons,nb_docs_rfaux
+	
+if __name__=='__main__':
+	
+        Type=sys.argv[1]
+        doc=sys.argv[2]
+        fnb_docs_bons=0
+        fnb_docs_faux=0
+        fnb_docs_rbons=0
+        fnb_docs_rfaux=0
+		
+        if Type=='Test':
+                for Type in tp3.types:
+                        for doc in glob.glob('CorpusTest\*\*.xml'):
+                                a,b,c,d=automate(Type,doc)
+                                fnb_docs_bons+=a
+                                fnb_docs_faux+=b
+                                fnb_docs_rbons+=c
+                                fnb_docs_rfaux+=d
+                                
+                                x=raw_input('') #Pour faire des pauses entre l'affichage des donnees afin d'interpreter les resultats
+                        print str(fnb_docs_bons),str(fnb_docs_faux),str(fnb_docs_rbons),str(fnb_docs_rfaux)	
+        else:
+                automate(Type,doc)
+
+
+
+
+
+

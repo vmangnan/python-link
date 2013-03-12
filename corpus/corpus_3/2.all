@@ -1,0 +1,413 @@
+# -*- coding: utf-8 -*-
+
+#IMPORT ET CONSTANTES
+#==============================================================================#
+#==============================================================================#
+
+import sys
+import os
+import re, string, htmlentitydefs, operator
+import random
+import pylab as P
+import numpy as N
+
+glob_eff=4
+glob_taille=5
+if len(sys.argv)==3:
+  glob_decoup=sys.argv[1]
+  glob_fichier=sys.argv[2]
+#if len(sys.argv)==2:
+#  glob_fichier=sys.argv[1]
+#  glob_decoup="zipf"
+else:
+  glob_fichier="en.xml"
+  glob_decoup="trigramme"
+glob_nb_par_langue=15
+glob_BC="europa_2000"
+glob_coeff_surete=1.2
+glob_nb_test=10
+
+
+
+
+#DECOUPAGE
+#==============================================================================#
+                 
+def analyseur_zipf(chaine):
+  return chaine.split()
+  
+def analyseur_trigramme(chaine):
+  l=[]
+  for i in range(len(chaine)-2):
+    l+=[chaine[i:i+3]]               
+  return l
+
+def analyseur_suffixe(chaine):
+  l=chaine.split()
+  g=[]
+  for x in l:
+    if len(x)<4:
+      g+=[x]
+    else:
+      g+=chaine[-4:]
+  return g
+
+if glob_decoup=="zipf":glob_decoup=analyseur_zipf
+if glob_decoup=="trigramme":glob_decoup=analyseur_trigramme
+if glob_decoup=="suffixe":glob_decoup=analyseur_suffixe
+
+
+#DEFINITION DES FONCTIONS
+#==============================================================================#
+#==============================================================================#
+
+#LECTURE/ECRITURE ET NETTOYAGE
+#==============================================================================#
+
+#LECTURE DU FICHIER
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+#ECRITURE DANS UN FICHIER
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+#TROUVER L'ENCODING
+def source2encoding(s) :
+  default_encoding = 'iso-8859-1'
+  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+  if match_charset : encoding = string.lower(match_charset.group(1))
+  else : encoding = default_encoding
+  return encoding
+
+#NETTOYER LE FICHIER HTML DES SCRIPT
+def clean_unicode_html(s_unicode) :
+  #Conversion des espaces
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  #Supression des balises HTML
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</sect>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  #Suppression des balises (ancinnes versions du code)
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  #Macroponctuation
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' ', clean_html)
+  
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' ', clean_html)
+
+  #Suppression des séparateurs
+  clean_html = re.sub(u'[,.;:\(\)\\\/\|+-]+', u'', clean_html)
+
+  #Supression des chiffres
+  clean_html = re.sub(u'[0-9]', u'', clean_html)
+  
+  return clean_html
+
+#TRANSLITERATION DES ENTITES SGML
+def decode_html_entities(s_unicode) :
+  html = re.sub(u'&#([0-9]+);', replace_num_entities, s_unicode)
+  pattern = re.compile(u'&([a-z]+);', re.I)
+  html = pattern.sub(replace_alpha_entities, html)
+  return html
+
+def replace_num_entities(matchobj_unicode) :
+  if int(matchobj_unicode.group(1)) in range(65535):
+    return unichr(int(matchobj_unicode.group(1)))
+  else:
+    return u'&#%s;'%(matchobj_unicode.group(1))
+ 
+def replace_alpha_entities(matchobj_unicode) :
+  k = matchobj_unicode.group(1)
+  if not htmlentitydefs.entitydefs.has_key(k) :
+    if k.isupper() :
+      k = string.lower(matchobj_unicode.group(1))
+      if not htmlentitydefs.entitydefs.has_key(k) : return ''
+    else : return ''
+  if len(htmlentitydefs.entitydefs[k]) == 1 :
+    car = htmlentitydefs.entitydefs[k]
+    return unicode(car, 'iso-8859-1')
+  else :
+    str_code = htmlentitydefs.entitydefs[k].strip(u'&#;')
+    return unichr(int(str_code))
+
+#AUTRES FONCTIONS PRATIQUES
+#==============================================================================#
+
+#TRANSFORMATION DU CHEMIN EN LANGUE
+def langue(chem):
+  chem=chem.split("/")
+  for x in chem:
+    if "." in x:
+      x=x.split(".")
+      return x[-2][0:2]
+
+def somme(liste):
+  res=0
+  for x in liste:
+    res+=x
+  return res
+
+
+#TRAITEMENT DES DICOS
+#==============================================================================#
+
+#IMPLEMANTATION DU DICO
+def dict_count(d, k) :
+  k=k.lower() #réduit la chaîne de caractère en miniscules
+  if(d.has_key(k)) :
+    d[k] += 1
+  else: d[k] = 1
+
+#CREATION D'UN DICO DEPUIS UNE CHAINE
+def dico(s,fun_decoupe):
+  s,d=fun_decoupe(s),{}
+  for k in s:
+    dict_count(d,k)
+  return d
+
+#TRAVAIL SUR LES DOCUMENTS A PROPREMENT PARLER
+#==============================================================================#
+
+####################################
+class Document(object):
+  def __init__(self,chemin):
+    self.langue=langue(chemin)
+    self.contenu=read_file(chemin)
+    self.codage=source2encoding(self.contenu)
+    self.dico={}
+    self.chemin=chemin
+    self.taille=0
+
+  def __repr__(self):
+    return self.langue+":"+str(self.taille)
+
+  def nettoyer(self):
+    self.contenu=unicode(self.contenu,self.codage)
+    self.codage="unicode"
+    self.contenu=decode_html_entities(self.contenu)
+    self.contenu=clean_unicode_html(self.contenu)
+
+  def collecter(self):
+    self.dico=dico(self.contenu,glob_decoup)
+    self.taille=len(self.dico)
+
+  def evincer(self):
+    d=self.dico
+    d2={}
+    for x in self.dico:
+      if len(x)<glob_taille and self.dico[x]>glob_eff:
+        d2[x]=self.dico[x]
+    self.dico=d2
+
+
+####################################
+class Corpus(object):
+  def __init__(self):
+    ch=os.listdir(glob_BC)
+
+    self.l=[]
+    d_langue={}
+    for x in ch:
+      x2=langue(x)
+      if not d_langue.has_key(x2) and x2 in ["fr","es","de","nl","lt","en"]:
+        d_langue[x2]=0
+      
+      if d_langue.has_key(x2) and d_langue[x2]<glob_nb_par_langue:
+        d_langue[x2]+=1
+        self.l+=[Document(glob_BC+"/"+x)]
+      
+    self.d_langue=d_langue
+    #ajouter un dictionnaire de taille des ressources totales
+
+  def __repr__(self):
+    return str(self.d_langue)+"\n"+str(self.l)
+
+
+####################################
+class DicoFinal(object):
+  def __init__(self):
+    self.corpus=Corpus()
+    self.dico={}
+    self.l_langue=[]
+    for x in self.corpus.l:
+      if x.langue not in self.l_langue: self.l_langue+=[x.langue]
+    
+  def __repr__(self):
+    return str(self.dico)
+
+  def ajouter(self):
+    t=len(self.l_langue)
+    for x in self.corpus.l:
+      x.nettoyer()
+      x.collecter()
+      x.evincer()
+      for y in x.dico:
+        if not self.dico.has_key(y):
+          l,i=[],0
+          while i<t:
+            if self.l_langue[i]==x.langue:
+              l+=[x.dico[y]]
+            else:
+              l+=[0]
+            i+=1
+        else:
+          i,l=0,self.dico[y]
+          while i<t:
+            if self.l_langue[i]==x.langue:
+              l[i]+=x.dico[y]
+            i+=1
+        self.dico[y]=l
+
+
+####################################
+class Match(object):
+  def __init__(self):
+    a=DicoFinal()
+    a.ajouter()
+    self.bc=a
+    self.nb_doc_testes=0
+    self.nb_doc_bons=0
+    self.nb_doc_mauvais=0
+    self.nb_non_renvoyes_bons=0
+    self.nb_non_renvoyes_mauvais=0
+    self.test_d_langue={}
+    self.dossier_test=[]
+
+  def __repr__(self):
+    
+    return "Base de connaissance : "+str(self.bc.corpus.d_langue) + "\n" +"Corpus de test       : "+str(self.test_d_langue)
+
+  def tester_total(self,dossier):
+
+    for i in ["fr","es","de","nl","lt","en","pt","it","lv","fi"]:
+      self.test_d_langue[i]=0
+
+    for x in os.listdir(dossier):
+      x2=langue(x)
+     
+      if self.test_d_langue.has_key(x2) and self.test_d_langue[x2]<glob_nb_test:
+        self.test_d_langue[x2]+=1
+        self.dossier_test+=[Document(dossier+"/"+x)]
+
+    for y in self.dossier_test:
+      tester(self,y.chemin)
+    
+    print u"--------------------------------------------------------------"
+    print u"Pertinent non renvoyé     "+str(self.nb_non_renvoyes_bons)
+    print u"Pertinent renvoyé         "+str(self.nb_doc_bons)
+    print u"Non pertinent non renvoyé "+str(self.nb_non_renvoyes_mauvais)
+    print u"Non pertinent renvoyé     "+str(self.nb_doc_mauvais)
+    print u"TOTAL                     "+str(self.nb_doc_testes)
+
+  
+
+def tester(self,chemin):
+  l_match=[0 for x in range(len(self.bc.l_langue))]
+  doc=Document(chemin)
+  doc.nettoyer()
+  doc.collecter()
+  doc.evincer()
+  l=l_match
+  for x in doc.dico:
+    if self.bc.dico.has_key(x):
+      for i in range(len(l_match)):
+        if self.bc.dico[x][i]>1: l[i]+=doc.dico[x]
+  l_match=l
+  tu=[]
+  for y in range(len(l_match)):
+    tu+=[(l_match[y],self.bc.l_langue[y])]
+  tu.sort(reverse=True)
+
+  self.nb_doc_testes+=1
+
+  if tu[0][0]>=glob_coeff_surete*tu[1][0]: # si le résultat est sûr
+    if tu[0][1]==doc.langue: self.nb_doc_bons+=1
+    else: self.nb_doc_mauvais+=1
+    print u"On peut être sûr que la langue est : "+tu[0][1]
+
+  else:
+    if tu[0][1]==doc.langue: self.nb_non_renvoyes_bons+=1
+    else: self.nb_non_renvoyes_mauvais+=1
+    print u"On ne peut pas être sûr que la langue est : "+tu[0][1] 
+
+
+  
+
+
+####################################
+class Graph(object):
+  def __init__(self):
+    self.x=[]
+    self.y=[]
+    
+  def total(self,dossier,decoupe,style="b-"):
+    self.x=[]
+    self.y=[]
+    
+    global glob_nb_par_langue
+    global glob_decoup
+    glob_decoup=decoupe
+    
+    for i in range(1,5):
+      
+      
+
+
+      glob_nb_par_langue=i*15
+      d=Match()
+      d.tester_total(dossier)
+      print "#####"
+      print glob_decoup
+      print d.bc.corpus
+      print "#####"
+      if d.nb_doc_bons<>0:
+        precision=(d.nb_doc_bons*1.0)/(d.nb_doc_bons+d.nb_doc_mauvais)
+        rappel=(d.nb_doc_bons*1.0)/(d.nb_doc_bons+d.nb_non_renvoyes_bons)
+        self.y+=[(2*precision*rappel)/(precision+rappel)] #en y la f-mesure
+      else: precision=0;rappel=0;self.y+=[0]
+
+      self.x+=[i*15]
+      
+      
+      #On nettoie les valeurs du tableau de contingence
+    
+
+    print " "
+    
+    if len(self.x)==len(self.y):P.plot(self.x,self.y,style);i=0
+  
+  def show(self):
+    P.ylabel('f-mesure')
+    P.xlabel("Taille du corpus")
+    P.show()
+    
+ma=Match()
+tester(ma,glob_fichier)
+#pour afficher le graphe de 15-60 documents par m�thode:
+
+#gr=Graph() 
+#gr.total("europa_2008",analyseur_zipf,"r-")
+#gr.total("europa_2008",analyseur_trigramme,"g-")
+#gr.total("europa_2008",analyseur_suffixe,"b-")
+#gr.show()
