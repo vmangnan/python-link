@@ -1,0 +1,228 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import re, string, htmlentitydefs
+
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def list2ul(l) :
+  s = ''
+  for e in l :
+    s += '<li>%s</li>'%(e)
+  return '<ul>%s</ul>'%s
+
+def dict2ul(d) :
+  s = ''
+  for k,e in d.iteritems() :
+    s += '<li>%s :: %s</li>'%(str(k),str(e))
+  return '<ul>%s</ul>'%s
+
+def dict_count(d, k) :
+  if(d.has_key(k)) :
+    d[k] += 1
+  else :
+    d[k] = 1
+
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def encoding2unicode(s, encoding) :
+  return unicode(s, encoding)
+
+def unicode2encoding(s, encoding) :
+  return s.encode(encoding)
+
+def source2encoding(s) :
+  default_encoding = 'iso-8859-1'
+  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+  if match_charset :
+    encoding = string.lower(match_charset.group(1))
+    print 'detected charset ::', encoding.encode('utf-8')
+  else :
+    encoding = default_encoding
+    print 'undetected charset, use default encoding ::', default_encoding
+  return encoding
+
+def color_string(s_unicode, substring, color) :
+  print 'color string : %s'%(substring.encode('utf-8'))
+  pattern1 = re.compile(u'%s'%(substring), re.I | re.M)
+  replace = u'<span style="color:%s; background-color:grey;">%s</span>'%(color, substring)
+  output = pattern1.sub(replace, s_unicode)
+  return output
+
+def clean_unicode_html(s_unicode) :
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' # ', clean_html)
+
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+  
+  return clean_html
+
+def decode_html_entities(s_unicode) :
+  #see :: def replace_num_entities()
+  html = re.sub(u'&#([0-9]+);', replace_num_entities, s_unicode)
+  pattern = re.compile(u'&([a-z]+);', re.I)
+  #see :: def replace_alpha_entities()
+  html = pattern.sub(replace_alpha_entities, html)
+  return html
+
+def replace_num_entities(matchobj_unicode) :
+  if int(matchobj_unicode.group(1)) in range(65535):
+    return unichr(int(matchobj_unicode.group(1)))
+  else:
+    return u'&#%s;'%(matchobj_unicode.group(1))
+
+def replace_alpha_entities(matchobj_unicode) :
+  k = matchobj_unicode.group(1)
+  if not htmlentitydefs.entitydefs.has_key(k) :
+    if k.isupper() :
+      k = string.lower(matchobj_unicode.group(1))
+      if not htmlentitydefs.entitydefs.has_key(cle) :
+        return ''
+    else :
+      return ''
+  if len(htmlentitydefs.entitydefs[k]) == 1 :
+    car = htmlentitydefs.entitydefs[k]
+    return unicode(car, 'iso-8859-1') #  car est codé en 'iso-8859-1' --> entitydefs[name] = chr(codepoint) dans htmlentitydefs
+  else :
+    str_code = htmlentitydefs.entitydefs[k].strip(u'&#;')
+    return unichr(int(str_code))
+
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import re
+import os
+import sys
+
+import tool_ltal as tl
+
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+
+def prepare_file(path_file) :
+  src_html = tl.read_file(path_file)
+  encoding_detected = tl.source2encoding(src_html)
+  src_html_unicode = unicode(src_html,encoding_detected)
+  src_html_unicode = tl.clean_unicode_html(src_html_unicode)
+  src_html_unicode = tl.decode_html_entities(src_html_unicode)
+  return src_html_unicode
+
+def extract_title(html_unicode) :
+  pattcomp = re.compile(u'<title>(.+)<\/title>', re.I)
+  trouv_titre = re.search(pattcomp, html_unicode)
+  if trouv_titre:
+    return trouv_titre.group(1)
+  return ''
+
+def get_list_words(html_unicode) :
+  pattern_word = u'[^\s\'".?;,:!\(\)\[\]\|]+'
+  pattern_word_compiled = re.compile(pattern_word)
+  list_words = pattern_word_compiled.findall(html_unicode)
+  return list_words
+
+def list_words2dict_effectif(list_words_unicode) :
+  dict_effectif = {}
+  for graphie in list_words_unicode :
+    tl.dict_count(dict_effectif, graphie)
+  return dict_effectif
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l, reverse=True)
+  return l
+
+def main(path_file) :
+  src_html_brut = unicode(tl.read_file(path_file),'utf-8')
+  src_html_unicode = prepare_file(path_file)
+  title_detected = extract_title(src_html_brut)
+  if title_detected != '' :
+    str_t = '<p>%s</p>'%(title_detected)
+  else :
+    str_t = '<p>nop</p>'
+
+  l = get_list_words(src_html_unicode)
+  d = list_words2dict_effectif(l)
+  z = dict_effectif2distrib_zipf(d)
+
+  it = d.items()
+  def cmpval(x,y) :
+    return y[1] - x[1]
+  it.sort(cmpval)
+
+  str_z = tl.ltuple2ul(it)
+
+  str_h = get_header_html()
+  str_f = get_footer_html()
+
+  output_zipf = '%s %s %s %s'%(str_h, str_t, str_z, str_f)
+
+  s_color = 'chaîne de carac'
+  s_color = unicode(s_color,'utf-8')
+  src_html_unicode = unicode(tl.read_file(path_file),'utf-8')
+  output_color = tl.color_string(src_html_unicode, s_color,'#AA2222')
+
+  return output_zipf,output_color
+
+if __name__=='__main__' :
+  path_file = sys.argv[1]
+  outputzipf, outputcolor = main(path_file)
+
+  outputzipf_utf8 = outputzipf.encode('utf-8')
+  tl.write_file('out_zipf.html',outputzipf_utf8)
+
+  outputcolor_utf8 = outputcolor.encode('utf-8')
+  tl.write_file('color.html',outputcolor_utf8)

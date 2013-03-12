@@ -1,0 +1,698 @@
+import re
+import sys
+import glob
+import matplotlib.pyplot as plt
+
+
+
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+
+def open_file(html):
+	f=open(html,'r')
+	read=f.read()
+	f.close()
+	return read
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def extract_and_encode(html_page): # Changes To Unicode Hopefully
+	pattern_word =u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'  #Finds encoding
+	pattern_word_compiled = re.compile(pattern_word, re.I)
+	list_words = pattern_word_compiled.findall(html_page)
+	if list_words==[]:
+		print 'No Charset Detected Using Default ::'
+		print 'Page changed from','Utf-8 to Unicode ::'
+		src_html_unicode=unicode(html_page,'utf-8')
+	elif len(list_words)>1:
+		print 'detected charset ::', list_words[0]
+		print 'Page changed from',list_words[0],'to Unicode ::'
+		src_html_unicode=unicode(html_page,list_words[0])
+	else:
+		print 'detected charset ::',list_words[0]
+		print 'Page changed from',list_words[0],'to Unicode ::'
+		src_html_unicode=unicode(html_page,list_words[0])
+	return src_html_unicode
+
+def extract_title(html_unicode) :
+  title_tag = re.compile(u'<title>(.+)<\/title>', re.I)
+  find_title= re.search(title_tag, html_unicode)
+  if find_title:
+    return find_title.group(1)
+
+
+
+
+def remove_tags(html_unicode): # Code Clean up
+
+	clean_html=html_unicode
+	clean_html = re.sub(u'&nbsp;', u' ',clean_html)
+  	clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+	tag_pattern=u'<script.+?</script>' #scripts
+	tag_pattern_compiled = re.compile(tag_pattern, re.I)
+	clean_html=tag_pattern_compiled.sub(u'',clean_html)
+
+	tag_pattern4=u'<link.+?</link>' #links
+	tag_pattern4_compiled = re.compile(tag_pattern4, re.I)
+	clean_html=tag_pattern4_compiled.sub(u'',clean_html)
+
+	tag_pattern5=u'<style.+?</style>' #styles
+	tag_pattern5_compiled = re.compile(tag_pattern5, re.I)
+	clean_html=tag_pattern5_compiled.sub(u'',clean_html)
+
+  	clean_html = re.sub(u'(?:&gt;|&lt;|!+|\.+|&#92;)', u' ', clean_html) # <
+
+ 	pattern7 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  	clean_html = pattern7.sub(u' # ', clean_html)
+
+
+  	pattern8 = re.compile(u'\s[#\s]+', re.I | re.M)
+  	clean_html = pattern8.sub(u' # ', clean_html)
+	
+	final_remove=re.compile(u'&#39;?|&quot;?|\u2019')
+	clean_html=final_remove.sub(u'\'',clean_html)
+
+	return clean_html
+
+def extract_words(html_unicode, lang): #Extracts Words
+	if lang == "ch" :
+		word_pattern=u'[^\s\w\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+'
+	else:
+		word_pattern=u'[^\s\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+\'?[^\s\d".?#;,:!*\+\(\)$\/%\[\]\|&_><-]+'
+	word_pattern_compiled=re.compile(word_pattern,re.I)
+	word_list=word_pattern_compiled.findall(html_unicode)
+
+	return word_list
+
+def extract_cara(w): #utilisation des offset
+	caracts=[]
+	for i in range(len(w)):
+		for j in range(len(w[i])):
+			caracts+=w[i][j]
+	dictc={}
+	print "This is the total number of Characters ::: ", len(caracts) 
+	for x in caracts:
+		if dictc.has_key(x):
+			dictc[x]+=1
+		else:
+			dictc[x]=1
+	return dictc
+			
+
+def effword(word_list):# Effectif sur les mots
+
+	dictw={}
+	for x in word_list:
+		if dictw.has_key(x):
+			dictw[x]+=1
+		else:
+			dictw[x]=1
+		
+	return dictw
+
+def dict_effectif2distrib_zipf(dict_effectif) :#l'ordre des mots en fonction de nombre de fois qu'il apparaisent sur la page
+
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l, reverse=True)
+  return l
+
+
+def graphmot(dic,l,c,lo): #Graph Loi de zipf 
+
+	plt.figure(1)
+	p1=plt.plot(range(0,len(dic)),dic,'-', label='%s'%(l[-7:-5]))
+	plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='%d'%(lo), ncol=4, mode="expand", borderaxespad=0.)
+	plt.ylabel("log(eff.)")
+	plt.xlabel("log(rang)")
+	plt.loglog()
+	plt.savefig('GraphZipf.png')
+
+
+def graphcara(dic,l,c,lo): #Graph Loi de zipf  pour les caracteres
+
+	plt.figure(2)
+	plt.plot(range(0,len(dic)),dic,'-', label='%s'%(l[-7:-5]))
+	plt.ylabel("log(eff.)")
+	plt.xlabel("log(rang)")
+	plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='%d'%(lo), ncol=4, mode="expand", borderaxespad=0.)
+	plt.loglog()
+	plt.savefig('GraphZipfcara.png')
+
+
+def graphLongeur(dic,l,c,lo,kl): #Graph Loi de zipf sur les longeur de mots
+
+
+	for x in dic:
+ 		plt.figure(3)
+		plt.plot(len(x),dic[x],'.')
+		plt.ylabel("effectif")
+		plt.xlabel("longeur")
+	plt.plot(label='%s'%(kl[-7:-5]))
+	plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='%d'%(lo), ncol=4, mode="expand", borderaxespad=0.)
+	plt.savefig('GraphZipfLongueur.png')
+
+def motdif(l): #Nombre de mot differente + Insertion d'un tableau dans le code HTML
+	motdif=[]
+	p=effword(l)
+	n=0
+	for x in p:
+		if p[x] != 1:
+			n+=1 
+	for x in l:
+		if x not in motdif:
+			motdif+=[x]
+	nbm=len(motdif)
+	d=len(l)/nbm
+	s = '''
+	<table border="1">
+	      <tr align=center>
+		<td>Nb Total de Mots</td>
+		<td>Nb d'occurence de Mots</td>
+		<td>Nb de Mots Diff.</td>
+		<td>Mots/Mots Diff.</td>
+	      </tr>
+	      <tr align=center>
+		<td>%d</td>
+		<td>%d</td>
+		<td>%d</td>
+		<td>%d</td>
+	      </tr>
+	</table>
+	'''%(len(l),n,nbm,d)
+	return s
+	
+
+def listit(deff): # supression de mot qui ne ce repete pas/apparait seulment 1 fois
+	li=[]
+	for x in deff:
+		if deff[x] != 1:
+			if x not in li:
+				li+=[x]
+	return li
+
+def motcontigue(l,clean_source_unicode,lang):# Detection des groupe de mots contigue
+	str_pat=[]
+	str_temp={}
+	p=u'[^\s\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+\'?[^\s\d".?#;,:!*\+\(\)$\/%\[\]\|&_><-]+'
+	if lang == "ch" :
+		p=u'[^\s\w\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+\'?[^\s\w\d".?#;,:!*\+\(\)$\/%\[\]\|&_><-]+'
+		w=p
+	else:
+		w=" "+p
+	n=0
+	for i in l:
+		pattern=i+w
+		while n <= 6:
+			pattern_search=u'%s'%(pattern)
+			pattern_compiled=re.compile(pattern_search, re.I)
+			str_pat+=pattern_compiled.findall(clean_source_unicode)
+			n+=1
+		  	pattern=pattern+w
+		n=0
+
+	for x in str_pat:
+		if str_temp.has_key(x):
+			str_temp[x]+=1
+		else:
+			str_temp[x]=1
+	str_pat=[]
+	for x in str_temp:
+		if str_temp[x] >=2:
+			str_pat+=[x]
+	return str_pat
+
+
+def color_string(s_unicode, substring, color) :
+		print 'coloring Repeating string code ::'
+		for x in substring:
+			pattern1 = re.compile(u'%s'%(x))
+			replace = u'<span style="color:%s; background-color:black;">%s</span>'%(color, x)
+			output = pattern1.sub(replace, s_unicode)
+  		return output
+
+
+
+def main(main_html,kl,c,lo):
+	print "Opening file :: %s"%(kl)
+	##########Encode, Clean and Extract##########
+	main_html=open_file(main_html)
+	src_unicode_html=extract_and_encode(main_html)
+
+	title=extract_title(src_unicode_html)
+	clean_html_unicode=remove_tags(src_unicode_html)
+	l=extract_words(clean_html_unicode, kl[-7:-5] )
+	####################################
+
+	#############Zipf############
+	lowerl=[x.lower() for x in l]
+	caract=extract_cara(lowerl)
+	d=effword(lowerl)
+	z=dict_effectif2distrib_zipf(d)
+	carac=dict_effectif2distrib_zipf(caract)
+	graphmot(z,kl,c,lo),graphLongeur(d,l,c,lo,kl),graphcara(carac,kl,c,lo)
+	#############################
+	
+	########Nb de mots differents########
+	motdifs=motdif(lowerl)
+	#####################################
+
+	###########Mots contigue/repeter############
+	q=listit(d)
+	print 'Recherche des groupes de mots....'
+	f=motcontigue(q,clean_html_unicode,kl[-7:-5])
+	############################################
+
+
+	############Create HTML files############
+	if title != '':
+		str_t='<p>%s</p>'%(title)
+	else:
+		str_t='<p>No title</p>'
+
+	str_h=get_header_html()
+	str_f=get_footer_html()
+	
+	it = d.items()
+	it2 = caract.items()
+
+  	def cmpval(x,y) :
+    		return y[1] - x[1]
+  	it.sort(cmpval)
+	it2.sort(cmpval)
+	
+	
+ 	str_z = ltuple2ul(it)
+	str_cara = ltuple2ul(it2)
+
+	img_z='<img src="GraphZipf_%s.png" title="GraphZipf" alt="GraphZipf" align=right />'%kl[-7:-5]
+
+	img_c='<img src="GraphZipfcara_%s.png" title="GraphZipfCara" alt="GraphZipf" align=right />'%kl[-7:-5]
+
+  	output_zipf = '%s %s %s %s %s %s'%(str_h, str_t, motdifs, img_z, str_z, str_f)
+	output_zipfc = '%s %s %s %s %s'%(str_h, str_t, img_c, str_cara, str_f)
+	
+	output_color = color_string(src_unicode_html, f, '#AA2222')
+
+	return output_zipf, output_color, output_zipfc
+	#########################################
+
+	
+if __name__=='__main__' :
+  corpus_folder = sys.argv[1]
+  i=1
+  for file1 in glob.glob("%s/*"%(corpus_folder)):
+	outputzipf, outputcolor, outputzipfc = main(file1, "%s"%(file1), 'g',i)
+
+  	outputzipf_utf8 = outputzipf.encode('utf-8') 
+ 	write_file('out_zipf_%s'%(file1[-7:-5]),outputzipf_utf8)
+	
+  	outputzipfc_utf8 = outputzipfc.encode('utf-8')
+  	write_file('out_zipfc_%s'%(file1[-7:-5]),outputzipfc_utf8)
+
+  	outputcolor_utf8 = outputcolor.encode('utf-8')
+  	write_file('color_%s'%(file1[-7:-5]),outputcolor_utf8)
+	i+=1
+
+
+
+import re
+import sys
+import math
+import matplotlib.pyplot as plt
+#from pytagcloud import create_tag_image, make_tags
+#from pytagcloud.lang.counter import get_tag_counts
+
+
+
+
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+
+def open_file(html):
+	f=open(html,'r')
+	read=f.read()
+	f.close()
+	return read
+
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+def extract_and_encode(html_page): # Changes To Unicode Hopefully
+	pattern_word =u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'  #Finds encoding
+	pattern_word_compiled = re.compile(pattern_word, re.I)
+	list_words = pattern_word_compiled.findall(html_page)
+	if list_words==[]:
+		print 'No Charset Detected Using Default ::'
+		print 'Page changed from','Utf-8 to Unicode ::'
+		src_html_unicode=unicode(html_page,'utf-8')
+	elif len(list_words)>1:
+		print 'detected charset ::', list_words[0]
+		print 'Page changed from',list_words[0],'to Unicode ::'
+		src_html_unicode=unicode(html_page,list_words[0])
+	else:
+		print 'log 45  *10 + 15detected charset ::',list_words[0]
+		print 'Page changed from',list_words[0],'to Unicode ::'
+		src_html_unicode=unicode(html_page,list_words[0])
+	return src_html_unicode
+
+def extract_title(html_unicode) :
+  title_tag = re.compile(u'<title>(.+)<\/title>', re.I)
+  find_title= re.search(title_tag, html_unicode)
+  if find_title:
+    return find_title.group(1)
+
+
+
+
+def remove_tags(html_unicode): # Code Clean up
+
+	clean_html=html_unicode
+	clean_html = re.sub(u'&nbsp;', u' ',clean_html)
+  	clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+	tag_pattern=u'<script.+?</script>' #scripts
+	tag_pattern_compiled = re.compile(tag_pattern, re.I)
+	clean_html=tag_pattern_compiled.sub(u'',clean_html)
+
+	tag_pattern4=u'<link.+?</link>' #links
+	tag_pattern4_compiled = re.compile(tag_pattern4, re.I)
+	clean_html=tag_pattern4_compiled.sub(u'',clean_html)
+
+	tag_pattern5=u'<style.+?</style>' #styles
+	tag_pattern5_compiled = re.compile(tag_pattern5, re.I)
+	clean_html=tag_pattern5_compiled.sub(u'',clean_html)
+
+  	clean_html = re.sub(u'(?:&gt;|&lt;|!+|\.+|&#92;)', u' ', clean_html) # <
+
+ 	pattern7 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  	clean_html = pattern7.sub(u' # ', clean_html)
+
+
+  	pattern8 = re.compile(u'\s[#\s]+', re.I | re.M)
+  	clean_html = pattern8.sub(u' # ', clean_html)
+	
+	final_remove=re.compile(u'&#39;?|&quot;?|\u2019')
+	clean_html=final_remove.sub(u'\'',clean_html)
+
+	return clean_html
+
+def extract_words(html_unicode): #Extracts Words
+	word_pattern=u'[^\s\d".?#;,:\(\)$\/%\[\]&\|_><-@]+\'?[^\s\d".?#;,:\(\)$\/%\[\]\|&_><-@]+'
+	word_pattern_compiled=re.compile(word_pattern,re.I)
+	word_list=word_pattern_compiled.findall(html_unicode)
+
+	return word_list
+
+def extract_cara(w): #utilisation des offset
+	caracts=[]
+	for i in range(len(w)):
+		for j in range(len(w[i])):
+			caracts+=w[i][j]
+	dictc={}
+	for x in caracts:
+		if dictc.has_key(x):
+			dictc[x]+=1
+		else:
+			dictc[x]=1
+	return dictc
+			
+
+def effword(word_list):# Effectif sur les mots
+
+	dictw={}
+	for x in word_list:
+		if dictw.has_key(x):
+			dictw[x]+=1
+		else:
+			dictw[x]=1
+		
+	return dictw
+
+def dict_effectif2distrib_zipf(dict_effectif) :#l'ordre des mots en fonction de nombre de fois qu'il apparaisent sur la page
+
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l, reverse=True)
+  return l
+
+
+def graphmot(dic): #Graph Loi de zipf 
+
+	plt.figure(1)
+	p1=plt.plot(range(0,len(dic)),dic,'r-')
+	plt.ylabel("log(eff.)")
+	plt.xlabel("log(rang)")
+	plt.loglog()
+	plt.savefig('GraphZipf.png')
+
+
+def graphcara(dic): #Graph Loi de zipf  pour les caracteres
+
+	plt.figure(2)
+	plt.plot(range(0,len(dic)),dic,'r-')
+	plt.ylabel("log(eff.)")
+	plt.xlabel("log(rang)")
+	plt.loglog()
+	plt.savefig('GraphZipfcara.png')
+
+
+def graphLongeur(dic): #Graph Loi de zipf sur les longeur de mots
+
+	for x in dic:
+		plt.figure(3)
+		plt.plot(len(x),dic[x],'r.')
+		plt.ylabel("effectif")
+		plt.xlabel("longeur")
+	plt.savefig('GraphZipfLongueur.png')
+
+def motdif(l): #Nombre de mot differente + Insertion d'un tableau dans le code HTML
+	motdif=[]
+	p=effword(l)
+	n=0
+	for x in p:
+		if p[x] != 1:
+			n+=1 
+	for x in l:
+		if x not in motdif:
+			motdif+=[x]
+	nbm=len(motdif)
+	d=len(l)/nbm
+	s = '''
+	<table border="1">
+	      <tr align=center>
+		<td>Nb Total de Mots</td>
+		<td>Nb d'occurence de Mots</td>
+		<td>Nb de Mots Diff.</td>
+		<td>Mots/Mots Diff.</td>
+	      </tr>
+	      <tr align=center>
+		<td>%d</td>
+		<td>%d</td>
+		<td>%d</td>
+		<td>%d</td>
+	      </tr>
+	</table>
+	'''%(len(l),n,nbm,d)
+	return s
+	
+
+def listit(deff): # supression de mot qui ne ce repete pas/apparait seulment 1 fois
+	li=[]
+	for x in deff:
+		if deff[x] != 1:
+			if x not in li:
+				li+=[x]
+	return li
+
+def motcontigue(l,clean_source_unicode):# Detection des groupe de mots contigue
+	str_pat=[]
+	lang = ""
+	str_temp={}
+	p=u'[^\s\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+\'?[^\s\d".?#;,:!*\+\(\)$\/%\[\]\|&_><-]+'
+	if lang == "ch" :
+		p=u'[^\s\w\d".?#;,:*\+!\(\)$\/%\[\]&\|_><-]+'
+		w=p
+	else:
+		w=" "+p
+	n=0
+	for i in l:
+		pattern=i+w
+		while n <= 6:
+			pattern_search=u'%s'%(pattern)
+			pattern_compiled=re.compile(pattern_search, re.I)
+			str_pat+=pattern_compiled.findall(clean_source_unicode)
+			n+=1
+		  	pattern=pattern+w
+		n=0
+
+	for x in str_pat:
+		if str_temp.has_key(x):
+			str_temp[x]+=1
+		else:
+			str_temp[x]=1
+	str_pat=[]
+	for x in str_temp:
+		if str_temp[x] >=2:
+			str_pat+=[x]
+	return str_pat
+
+
+def color_string(s_unicode, substring, color) :
+		print 'coloring Repeating string code ::'
+		for x in substring:
+			print x
+			pattern1 = re.compile(u'%s'%(x))
+			replace = u'<span style="color:%s; background-color:black;">%s</span>'%(color,x)
+			output = pattern1.sub(replace, s_unicode)
+  		return output
+
+
+
+
+		
+
+
+def main(main_html):
+	##########Encode, Clean and Extract##########
+	main_html=open_file(main_html)
+	src_unicode_html=extract_and_encode(main_html)
+
+	title=extract_title(src_unicode_html)
+	clean_html_unicode=remove_tags(src_unicode_html)
+
+
+
+	l=extract_words(clean_html_unicode)
+	####################################
+
+	#############Zipf############
+	lowerl=[x.lower() for x in l]
+	caract=extract_cara(lowerl)
+	d=effword(lowerl)
+	
+	z=dict_effectif2distrib_zipf(d)
+	carac=dict_effectif2distrib_zipf(caract)
+	graphmot(z),graphLongeur(d),graphcara(carac)
+	#############################
+	
+	########Nb de mots differents########
+	motdifs=motdif(lowerl)
+	
+	#####################################
+
+	###########Mots contigue/repeter############
+	q=listit(d)
+	print 'Recherche des groupes de mots....'
+	f=motcontigue(q,clean_html_unicode)
+	############################################
+
+
+	############Create HTML files############
+	if title != '':
+		str_t='<p>%s</p>'%(title)
+	else:
+		str_t='<p>No title</p>'
+
+	str_h=get_header_html()
+	str_f=get_footer_html()
+	
+	it = d.items()
+	it2 = caract.items()
+
+  	def cmpval(x,y) :
+    		return y[1] - x[1]
+  	it.sort(cmpval)
+	it2.sort(cmpval)
+	
+	#nuage_mot=nuage(it)
+ 	str_z = ltuple2ul(it)
+	str_cara = ltuple2ul(it2)
+
+	img_z='<img src="GraphZipf.png" title="GraphZipf" alt="GraphZipf" align=right />'
+
+	img_c='<img src="GraphZipfcara.png" title="GraphZipfCara" alt="GraphZipf" align=right />'
+
+  	output_zipf = '%s %s %s %s %s %s'%(str_h, str_t, motdifs, img_z, str_z, str_f)
+	output_zipfc = '%s %s %s %s %s'%(str_h, str_t, img_c, str_cara, str_f)
+	#output_nuage = '%s %s %s %s'%(str_h, str_t, nuage_mot, str_f)
+	
+	output_color = color_string(src_unicode_html, f, '#AA2222')
+
+	return output_zipf, output_color, output_zipfc#, output_nuage
+	#########################################
+
+	
+if __name__=='__main__' :
+  main_html = sys.argv[1]
+  outputzipf, outputcolor, outputzipfc = main(main_html)
+
+  outputzipf_utf8 = outputzipf.encode('utf-8')
+  write_file('out_zipf.html',outputzipf_utf8)
+	
+  outputzipfc_utf8 = outputzipfc.encode('utf-8')
+  write_file('out_zipfc.html',outputzipfc_utf8)
+
+  outputcolor_utf8 = outputcolor.encode('utf-8')
+  write_file('color.html',outputcolor_utf8)
+
+  #outputnuage_utf8 = output_nuage.encode('utf-8')
+  #write_file('nuage.html',outputnuage_utf8)

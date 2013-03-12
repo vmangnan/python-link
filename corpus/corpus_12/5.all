@@ -1,0 +1,656 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import re
+import csv
+import glob
+
+
+
+class Prepa_fichier(object):
+
+    def __init__(self):
+        
+        self.encoding_default= u'iso-8859-1'
+
+    def conv_unicode(self,source):
+        self.source=source
+        patt_encod= re.compile(u'<meta HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=(.*)["\']', re.I)
+        self.encod=re.findall(patt_encod,source)
+        print(self.encod)
+
+        if self.encod=='':
+            self.source= unicode(self.source, self.encoding_default, 'replace')
+            
+        else:
+            self.source= unicode(self.source, self.encod[0], 'replace')
+            duplicata=self.source[0:]
+        return duplicata
+
+
+    def first_clean(self):
+
+        self.source= re.sub(u'[ \t\n\r]+', u' ', self.source)
+	self.source= re.sub(u'&nbsp;', u'', self.source)
+        
+        pattern = re.compile(u'<script.+?</script>', re.I | re.M)		#    <--------------
+	self.source = re.sub(pattern, u'',self.source)
+
+	pattern = re.compile(u'<!\-\-.+?\-\->', re.M)  
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'<select.+?</select>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'<style.+?</style>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'href=.*?>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'img.*?>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	self.source = re.sub(u'(?:&gt;|&lt;)', u'', self.source)
+	self.source = re.sub(u'<[^>]+>', u' # ', self.source)
+
+	return self.source
+
+    def isole_mots(self,source):
+
+        group_mots= re.compile(u'[^ %\.\?,;:!\"\'@\(\)\[\]\|+=_\-\/(0-9)]+')
+        source=group_mots.findall(source)
+        li_group=[[]]
+        index=0
+        test=0
+        
+
+        for i in source:
+            if i !='#':
+                if test==1:
+                    index+=1
+                    li_group.append([])
+                    test=0
+                li_group[index].append(i)
+            else:
+                test=1
+
+        del li_group[0]
+
+
+        return li_group
+
+
+
+class Traitement(object):
+
+    def __init__(self):
+        
+        self.dic={}
+
+        
+
+    def compt_mot(self,liste):
+        self.liste=liste
+        for groupe in self.liste:
+            for mot in groupe:
+                self.dic[mot]=self.dic.get(mot,0)+1
+
+
+
+    def compt_carac(self):
+        dic_carac={}
+        for groupe in self.liste:
+            for mot in groupe:
+                for car in mot:
+                    dic_carac[car]=dic_carac.get(car,0)+1
+        return dic_carac
+        
+
+
+    def maxi_liste(self):
+        maxi=0
+        for i in self.liste:
+            if len(i)>maxi:
+                maxi=len(i)
+        return maxi
+
+
+    def max_carac(self):
+        maxi=0
+        list_carac=[]
+        for i in self.liste:
+            res=0
+            chaine=''
+            for mot in i:
+                res=res+len(mot)
+                chaine=chaine+mot
+            if res>maxi:
+                maxi=res
+            list_carac.append(chaine)
+
+        return maxi,list_carac
+
+        
+
+    def mot_contigus(self,n):
+        dic_contigus={}
+        for i in self.liste:
+            longueur=len(i)
+            for index in range (longueur-n+1):
+                chaine=u''
+                for x in range (n):
+                    chaine=chaine+u' '+i[index+x]
+                    
+                dic_contigus[chaine]=dic_contigus.get(chaine,0)+1
+        
+        return dic_contigus
+
+
+    
+
+    def carac_contigus(self,n,liste):
+        dic_contigus={}
+        
+        for groupe in liste:
+            
+            for index in range(len(groupe)-n-1):
+                chaine=''
+                for i in range(n):
+                    chaine=chaine+groupe[index+i]
+
+                dic_contigus[chaine]=dic_contigus.get(chaine,0)+1
+                
+                
+        return dic_contigus
+    
+    
+
+
+    def test_continue(self,dic):
+        dic_trie=dic.copy()
+        test=False
+        for cle in dic:
+            if dic[cle]==1:
+                del dic_trie[cle]
+            else:
+                test=True
+        return test,dic_trie
+
+
+    
+
+    def li_zipf(self,dic):
+
+        li=[]
+        for cle in dic:
+            li.append([dic[cle],cle,len(cle)])
+        li.sort(reverse=True)
+        
+        return li
+
+    
+
+    def li_carac(self,dic):
+        li=[]
+        for cle in dic:
+            li.append([dic[cle],cle])
+        li.sort(reverse=True)
+        return li
+
+
+
+
+    def make_csv(self,liste_mot,liste_car):
+        nom_fichier = 'csv/mot.csv'
+        nom_car='csv/car.csv'
+        
+        csv = open(nom_fichier, "w")
+        csv_car = open(nom_car, "w")
+
+        csv.write('''"mot";'''+'''"longueur";'''+'''"rang";'''+'''"zipf";'''+"\n")
+        csv_car.write('''"caractere";'''+'''"rang";'''+"\n")
+        
+        counteur = 1
+        rang_car=1
+        
+        for tupple in liste_mot :
+            csv.write('''"'''+str(tupple[2]).encode("utf-8")+'''"'''+""";""")
+            csv.write('''"'''+tupple[1].encode("utf-8")+'''"'''+""";""")
+            csv.write('"'+str(tupple[0]).encode("utf-8")+'''"'''+""";""")
+            csv.write('"'+str(counteur)+'''"'''+""";"""+"""\n""")
+            counteur+=1
+
+        for tupple in liste_car:
+            csv_car.write('''"'''+str(tupple[0]).encode("utf-8")+'''"'''+""";""")
+            csv_car.write('''"'''+tupple[1].encode("utf-8")+'''"'''+""";"""+"""\n""")
+
+
+    def make_txt(self,dic):
+        fic=open('txt/caractere.txt','w')
+        for cle in dic:
+            fic.write(cle.encode("utf-8")+':'+str(dic[cle])+'\n')
+        fic.close()
+                    
+
+    def nuage_mot(self):
+
+        nuage=open('nuage/nuage.txt','w')
+        for cle in self.dic:
+            if len(cle)>5 :
+                nuage.write(cle.encode("utf-8")+' ')
+        nuage.close()
+
+        
+
+    def colorier(self,chaine,dic):
+
+        fic=open('color/site_color.html','w')
+
+        for cle in dic:
+    
+            chaine=re.sub(cle.decode("utf-8"),u'<span style="color: red;">%s</span>' % cle.decode("utf-8"),chaine,re.I)
+                 
+        fic.write(chaine.decode("utf-8"))
+        fic.close()
+
+        
+        
+
+
+        
+
+
+
+if __name__ == "__main__":
+
+    
+    expr="corpus/ru/*.html"
+    dic_complet={}
+    dic_eff_complet={}
+    preparation=Prepa_fichier()
+    traitement=Traitement()
+    
+    
+    for path in glob.glob(expr):
+
+        source=open(path,"r")
+        s=source.read()
+
+        launch=preparation.conv_unicode(s)
+        
+
+        source=preparation.first_clean()
+        liste=preparation.isole_mots(source)
+        
+        traitement.compt_mot(liste)
+        dic_carac=traitement.compt_carac()
+        
+        maxi=traitement.maxi_liste()
+        maxi_carac,li_car_contigus=traitement.max_carac()
+        
+
+        dic_temp={}
+        dic_temp_carac={}
+        dic_complet_carac={}
+
+        test=True
+        
+        for n in range(2,maxi+1):
+            if test==True:
+                dic_temp=traitement.mot_contigus(n)
+                test,dic_temp=traitement.test_continue(dic_temp)
+                dic_complet.update(dic_temp)
+
+        test=True
+
+        for n in range(2,maxi_carac+1):
+            if test==True:
+                dic_temp_carac=traitement.carac_contigus(n,li_car_contigus)
+                test,dic_temp_carac=traitement.test_continue(dic_temp_carac)
+                dic_complet_carac.update(dic_temp_carac)
+        
+        
+#       traitement.colorier(duplicata,dic_complet)
+                
+    liste_zipf=traitement.li_zipf(traitement.dic)
+    liste_carac=traitement.li_carac(dic_carac)
+    
+    traitement.make_csv(liste_zipf,liste_carac)
+    traitement.make_txt(dic_complet_carac)
+
+    traitement.nuage_mot()
+    
+        
+    
+    
+
+    
+            
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import re
+import csv
+import glob
+
+
+
+class Prepa_fichier(object):
+
+    def __init__(self):
+        
+        self.encoding_default= u'iso-8859-1'
+
+    def conv_unicode(self,source):
+        self.source=source
+        patt_encod= re.compile(u'<meta HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=(.*)["\']', re.I)
+        self.encod=re.findall(patt_encod,source)
+        print(self.encod)
+
+        if self.encod=='':
+            self.source= unicode(self.source, self.encoding_default, 'replace')
+            
+        else:
+            self.source= unicode(self.source, self.encod[0], 'replace')
+            duplicata=self.source[0:]
+        return duplicata
+
+
+    def first_clean(self):
+
+        self.source= re.sub(u'[ \t\n\r]+', u' ', self.source)
+	self.source= re.sub(u'&nbsp;', u'', self.source)
+        
+        pattern = re.compile(u'<script.+?</script>', re.I | re.M)		#    <--------------
+	self.source = re.sub(pattern, u'',self.source)
+
+	pattern = re.compile(u'<!\-\-.+?\-\->', re.M)  
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'<select.+?</select>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'<style.+?</style>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'href=.*?>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	pattern = re.compile(u'img.*?>', re.I | re.M)
+	self.source = re.sub(pattern,u'', self.source)
+
+	self.source = re.sub(u'(?:&gt;|&lt;)', u'', self.source)
+	self.source = re.sub(u'<[^>]+>', u' # ', self.source)
+
+	return self.source
+
+    def isole_mots(self,source):
+
+        group_mots= re.compile(u'[^ %\.\?,;:!\"\'@\(\)\[\]\|+=_\-\/(0-9)]+')
+        source=group_mots.findall(source)
+        li_group=[[]]
+        index=0
+        test=0
+        
+
+        for i in source:
+            if i !='#':
+                if test==1:
+                    index+=1
+                    li_group.append([])
+                    test=0
+                li_group[index].append(i)
+            else:
+                test=1
+
+        del li_group[0]
+
+
+        return li_group
+
+
+
+class Traitement(object):
+
+    def __init__(self):
+        
+        self.dic={}
+
+        
+
+    def compt_mot(self,liste):
+        self.liste=liste
+        for groupe in self.liste:
+            for mot in groupe:
+                self.dic[mot]=self.dic.get(mot,0)+1
+
+
+
+    def compt_carac(self):
+        dic_carac={}
+        for groupe in self.liste:
+            for mot in groupe:
+                for car in mot:
+                    dic_carac[car]=dic_carac.get(car,0)+1
+        return dic_carac
+        
+
+
+    def maxi_liste(self):
+        maxi=0
+        for i in self.liste:
+            if len(i)>maxi:
+                maxi=len(i)
+        return maxi
+
+
+    def max_carac(self):
+        maxi=0
+        list_carac=[]
+        for i in self.liste:
+            res=0
+            chaine=''
+            for mot in i:
+                res=res+len(mot)
+                chaine=chaine+mot
+            if res>maxi:
+                maxi=res
+            list_carac.append(chaine)
+
+        return maxi,list_carac
+
+        
+
+    def mot_contigus(self,n):
+        dic_contigus={}
+        for i in self.liste:
+            longueur=len(i)
+            for index in range (longueur-n+1):
+                chaine=u''
+                for x in range (n):
+                    chaine=chaine+u' '+i[index+x]
+                    
+                dic_contigus[chaine]=dic_contigus.get(chaine,0)+1
+        
+        return dic_contigus
+
+
+    
+
+    def carac_contigus(self,n,liste):
+        dic_contigus={}
+        
+        for groupe in liste:
+            
+            for index in range(len(groupe)-n-1):
+                chaine=''
+                for i in range(n):
+                    chaine=chaine+groupe[index+i]
+
+                dic_contigus[chaine]=dic_contigus.get(chaine,0)+1
+                
+                
+        return dic_contigus
+    
+    
+
+
+    def test_continue(self,dic):
+        dic_trie=dic.copy()
+        test=False
+        for cle in dic:
+            if dic[cle]==1:
+                del dic_trie[cle]
+            else:
+                test=True
+        return test,dic_trie
+
+
+    
+
+    def li_zipf(self,dic):
+
+        li=[]
+        for cle in dic:
+            li.append([dic[cle],cle,len(cle)])
+        li.sort(reverse=True)
+        
+        return li
+
+    
+
+    def li_carac(self,dic):
+        li=[]
+        for cle in dic:
+            li.append([dic[cle],cle])
+        li.sort(reverse=True)
+        return li
+
+
+
+
+    def make_csv(self,liste_mot,liste_car):
+        nom_fichier = 'csv/mot.csv'
+        nom_car='csv/car.csv'
+        
+        csv = open(nom_fichier, "w")
+        csv_car = open(nom_car, "w")
+
+        csv.write('''"mot";'''+'''"longueur";'''+'''"rang";'''+'''"zipf";'''+"\n")
+        csv_car.write('''"caractere";'''+'''"rang";'''+"\n")
+        
+        counteur = 1
+        rang_car=1
+        
+        for tupple in liste_mot :
+            csv.write('''"'''+str(tupple[2]).encode("utf-8")+'''"'''+""";""")
+            csv.write('''"'''+tupple[1].encode("utf-8")+'''"'''+""";""")
+            csv.write('"'+str(tupple[0]).encode("utf-8")+'''"'''+""";""")
+            csv.write('"'+str(counteur)+'''"'''+""";"""+"""\n""")
+            counteur+=1
+
+        for tupple in liste_car:
+            csv_car.write('''"'''+str(tupple[0]).encode("utf-8")+'''"'''+""";""")
+            csv_car.write('''"'''+tupple[1].encode("utf-8")+'''"'''+""";"""+"""\n""")
+
+
+    def make_txt(self,dic):
+        fic=open('txt/caractere.txt','w')
+        for cle in dic:
+            fic.write(cle.encode("utf-8")+':'+str(dic[cle])+'\n')
+        fic.close()
+                    
+
+    def nuage_mot(self):
+
+        nuage=open('nuage/nuage.txt','w')
+        for cle in self.dic:
+            if len(cle)>5 :
+                nuage.write(cle.encode("utf-8")+' ')
+        nuage.close()
+
+        
+
+    def colorier(self,chaine,dic):
+
+        fic=open('color/site_color.html','w')
+
+        for cle in dic:
+    
+            chaine=re.sub(cle.decode("utf-8"),u'<span style="color: red;">%s</span>' % cle.decode("utf-8"),chaine,re.I)
+                 
+        fic.write(chaine.decode("utf-8"))
+        fic.close()
+
+        
+        
+
+
+        
+
+
+
+if __name__ == "__main__":
+
+    
+    expr="corpus/ru/*.html"
+    dic_complet={}
+    dic_eff_complet={}
+    preparation=Prepa_fichier()
+    traitement=Traitement()
+    
+    
+    for path in glob.glob(expr):
+
+        source=open(path,"r")
+        s=source.read()
+
+        launch=preparation.conv_unicode(s)
+        
+
+        source=preparation.first_clean()
+        liste=preparation.isole_mots(source)
+        
+        traitement.compt_mot(liste)
+        dic_carac=traitement.compt_carac()
+        
+        maxi=traitement.maxi_liste()
+        maxi_carac,li_car_contigus=traitement.max_carac()
+        
+
+        dic_temp={}
+        dic_temp_carac={}
+        dic_complet_carac={}
+
+        test=True
+        
+        for n in range(2,maxi+1):
+            if test==True:
+                dic_temp=traitement.mot_contigus(n)
+                test,dic_temp=traitement.test_continue(dic_temp)
+                dic_complet.update(dic_temp)
+
+        test=True
+
+        for n in range(2,maxi_carac+1):
+            if test==True:
+                dic_temp_carac=traitement.carac_contigus(n,li_car_contigus)
+                test,dic_temp_carac=traitement.test_continue(dic_temp_carac)
+                dic_complet_carac.update(dic_temp_carac)
+        
+        
+#       traitement.colorier(duplicata,dic_complet)
+                
+    liste_zipf=traitement.li_zipf(traitement.dic)
+    liste_carac=traitement.li_carac(dic_carac)
+    
+    traitement.make_csv(liste_zipf,liste_carac)
+    traitement.make_txt(dic_complet_carac)
+
+    traitement.nuage_mot()
+    
+        
+    
+    
+
+    
+            

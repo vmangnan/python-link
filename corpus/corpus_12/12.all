@@ -1,0 +1,289 @@
+# -*- coding: utf8 -*-
+
+import re
+import string
+import sys
+import glob
+import os
+
+def source2encoding(s) :
+  default_encoding = 'iso-8859-1'
+  pattern_detect_encoding = 'charset="?(.*?)"'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+  if match_charset :
+    encoding = string.lower(match_charset.group(1))
+    print 'detected charset ::', encoding.encode('utf-8')
+  else :
+    encoding = default_encoding
+    print 'undetected charset, use default encoding ::', default_encoding
+  return encoding
+
+def clean_unicode_html(s_unicode) :
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  pattern5 = re.compile(u'<((address)|(blockote)|(body)|(dd)|(div)|(dl)|(dt)|(fieldset)|(form)|(h[1-6])|(head)|(html)|(li)|(map)|(noscript)|(ol)|(p)|(pre)|(table)|(tbody)|(td)|(tfoot)|(th)|(thead)|(tr)|(ul))>', re.I | re.M)
+  clean_html = pattern5.sub(u' # ', clean_html)
+  
+  pattern6 = re.compile(u'</((address)|(blockote)|(body)|(dd)|(div)|(dl)|(dt)|(fieldset)|(form)|(h[1-6])|(head)|(html)|(li)|(map)|(noscript)|(ol)|(p)|(pre)|(table)|(tbody)|(td)|(tfoot)|(th)|(thead)|(tr)|(ul))>', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' ', clean_html)
+
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+  
+  return clean_html
+   
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'a')
+  f.write(s)
+  f.close()
+    
+def cutWords(chaine):
+	lw=[]
+	pattern_mot="\w+"
+	pattern_mot_compiled=re.compile(pattern_mot, re.I | re.U)
+	lw=re.findall(pattern_mot_compiled, chaine)
+	return lw		
+	
+def cutChar(chaine):
+	lc=[]
+	pattern_mot="\w"
+	pattern_mot_compiled=re.compile(pattern_mot, re.I | re.U)
+	lc=re.findall(pattern_mot_compiled, chaine)
+	return lc			
+
+def checkContinue(d):
+	for _,eff in d.iteritems():
+		if eff>1:
+			return True
+	return False
+	
+def get_n_gram(l,n):
+	d={}
+	for su in l:
+		lw=cutWords(su)
+		len_w=len(lw)
+		for i in range(len_w-n+1):
+			lngram=lw[i:i+n]
+			ngram=tuple(lngram)
+			if ngram not in d:
+				d[ngram]=0
+			d[ngram]+=1
+	return d
+
+def get_n_char(l,n):
+	d={}
+	for su in l:
+		lw=cutChar(su)
+		len_w=len(lw)
+		for i in range(len_w-n+1):
+			lngram=lw[i:i+n]
+			ngram=tuple(lngram)
+			if ngram not in d:
+				d[ngram]=0
+			d[ngram]+=1
+	return d
+	
+def getAllNGram(l):
+	d={}
+	n=2
+	b=True
+	while b:
+		dng=get_n_gram(l,n)
+		b=checkContinue(dng)
+		n+=1
+		d.update(dng)
+	return d
+	
+def getAllNchar(l):
+	d={}
+	n=2
+	b=True
+	while b:
+		dng=get_n_char(l,n)
+		b=checkContinue(dng)
+		n+=1
+		d.update(dng)
+	return d
+	
+def dico2csv(d,path,nom):
+	l=d.values()
+	l.sort()
+	l.reverse()
+	for i in range(len(l)-1):
+		file="%d %d\n"%(i+1,l[i])
+		write_file(path[:len(path)-1]+nom+'.csv',file)
+		
+def dico2csvCourt(d,path,nom):
+	for mot in d:
+		file="%d %d\n"%(len(mot[0]),d[mot])
+		write_file(path[:len(path)-1]+nom+'.csv',file)
+
+def string2list(s):
+	l=[]
+	separateur='(.*?) # '
+	#L'expression fonctionne car tout doc html finit par </hmtl>
+	separateur_compiled=re.compile(separateur, re.I | re.U)
+	l=re.findall(separateur_compiled, s)
+	return l
+
+def rapportMots(d):
+	return float(len(d))/float(sum(d.values()))
+  
+def fusionnerDicos(d,dd):
+	for i in dd:
+		if i not in d:
+			d[i]=0
+		d[i]+=dd[i]
+		
+def estUneBaliseOuvrante(st):
+    return re.match('^<span style="background-color:\w*">$',st)
+
+def estUneBaliseFermante(st):
+    return re.match('^</span>$',st)
+
+def estUneBalise(st):
+  return estUneBaliseFermante(st) or estUneBaliseOuvrante(st)
+
+def aUneValeurSuperieureAUn(d):
+  ret=0
+  for cle in d.keys():
+    if d[cle]>1:
+      ret=1
+  return ret
+
+def estDejaDansUneBalise(l,ch,ind):
+  ret=0
+  avant=0
+  apres=0
+  i=0
+  j=0
+  while estUneBalise(l[ind-i])==None and i<=ind:
+    i+=1
+  while estUneBalise(l[ind+ch+j-1])==None and ind+ch+j<len(l):
+    j+=1
+  if estUneBaliseFermante(l[ind+ch+j-1]) and estUneBaliseOuvrante(l[ind-i]):
+    ret=1
+  return ret
+
+
+def colorie(d,l,path,listeCouleur=['<span style="background-color:blue">','<span style="background-color:green">','<span style="background-color:yellow">','<span style="background-color:red">','<span style="background-color:black">','<span style="background-color:orange">','<span style="background-color:pink">']):
+    li=list(l)
+    nbrBalise=0
+    while aUneValeurSuperieureAUn(d):
+      nbrMot = 0
+      key = ''
+      for cle in d.keys():
+          if len(cle)>=nbrMot and d[cle]>1:
+            nbrMot=len(cle)
+            key=cle
+      del d[key]
+      ind=0
+      BaliseCouleur=listeCouleur[nbrMot%7]
+      while ind<=len(li):
+        if ind+nbrMot<=len(li):
+          if estUneBalise(li[ind])==None:
+            cmpt=0
+            i=0
+            tropLoin=0
+            bal=0
+            for mot in key:
+              if tropLoin==0:
+                while estUneBalise(li[ind+i]) and tropLoin==0:
+                  bal+=1
+                  if ind+nbrMot+bal>len(li):
+                    tropLoin=1
+                  else:
+                    i+=1
+                if mot==li[ind+i]:
+                  cmpt+=1
+                i+=1
+            if cmpt==nbrMot and tropLoin==0:
+              if estDejaDansUneBalise(li,i,ind)==0:
+                fermante=0
+                ferm=0
+                ouvrante=0
+                for num in range(i):
+                      if estUneBaliseFermante(li[ind+num]):
+                              fermante=ind+num
+                              ferm=1
+                if fermante==0:
+                  li.insert(ind,BaliseCouleur)
+                else:
+                  li.insert(fermante+1,BaliseCouleur)
+                for num in range(i-(fermante+1)):
+                       if estUneBaliseOuvrante(li[ind+num+fermante+1]):
+                              ouvrante=ind+num+fermante+1
+                if ouvrante==0:
+                  li.insert(ind+nbrMot+1+ferm,'</span>')
+                else:
+                  li.insert(ouvrante+1,'</span>')
+                nbrBalise+=2
+        ind+=1
+    chaine=''
+    for m in li:
+      chaine+=m
+      chaine+=' '
+    chaine.encode('iso-8859-1')
+    write_file(path+'_colorie.html', chaine)
+
+
+#Traitement
+expr="corpus/russe/*"
+for path in glob.glob(expr+'.htm'):
+	dAllMots,dAllChar={},{}
+	source=read_file(path)
+	encodage=source2encoding(source)
+	source=unicode(source, encodage)
+	source=clean_unicode_html(source)
+	source=string2list(source)
+	dMots=get_n_gram(source,1)
+	fusionnerDicos(dAllMots,dMots)
+	dNGram=getAllNGram(source)
+	#colorie(dNGram,source,path)
+	dChar=get_n_char(source,1)
+	fusionnerDicos(dAllChar,dChar)
+for path in glob.glob(expr+'.html'):
+	dAllMots,dAllChar={},{}
+	source=read_file(path)
+	encodage=source2encoding(source)
+	source=unicode(source, encodage)
+	source=clean_unicode_html(source)
+	source=string2list(source)
+	dMots=get_n_gram(source,1)
+	fusionnerDicos(dAllMots,dMots)
+	dNGram=getAllNGram(source)
+	#colorie(dNGram,source,path)
+	dChar=get_n_char(source,1)
+	fusionnerDicos(dAllChar,dChar)
+
+#Sortie des résultats
+dico2csv(dAllMots,expr,'mots')
+dico2csvCourt(dAllMots,expr,'taille_mots')
+dico2csv(dAllChar,expr,'char')
+write_file(expr[:len(expr)-1]+'rapport',str(rapportMots(dAllMots)))
+

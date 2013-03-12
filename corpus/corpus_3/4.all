@@ -1,0 +1,347 @@
+##### mes imports ####
+# -*- utf8 -*-
+import re               ### mes import
+import os
+import sys
+import string
+import json
+
+#from matplotlib import pyplot as plt  # Imports pour les graphes
+#import numpy as np
+
+
+
+
+#### MES FONCTIONS #####
+
+def read_file(path_file) :    ### Fonction lisant le fichier
+    f=open(path_file, 'r')
+    sourcepage=f.read()
+    f.close()
+    return sourcepage
+
+
+def clean_unicode_html(sourcepage_unicode) :	  ### Nettoyage des entitees HTML	
+  clean_html = re.sub(u'&nbsp;', ' ', sourcepage_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' ', clean_html)
+
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' ', clean_html)
+
+  pattern2 = re.compile(u'\d+', re.I | re.M)
+  clean_html = pattern2.sub(u' ', clean_html)
+
+  pattern3 = re.compile(u'[_.,;?!]+', re.I | re.M)
+  clean_html = pattern3.sub(u' ', clean_html)
+
+  pattern7 = re.compile(u'"', re.I | re.M)
+  clean_html = pattern7.sub(u' ', clean_html)
+
+  pattern8 = re.compile(u'\'', re.I | re.M)
+  clean_html = pattern8.sub(u' ', clean_html)
+
+  pattern9 = re.compile(u'/', re.I | re.M)
+  clean_html = pattern9.sub(u' ', clean_html)
+
+  pattern10 = re.compile(u':', re.I | re.M)
+  clean_html = pattern10.sub(u' ', clean_html)
+  
+  return clean_html
+
+
+def get_list_words(html_unicode) :   ### Texte ==> liste de mots
+  pattern_word = u'[A-Za-z]+'
+  pattern_word_compiled = re.compile(pattern_word)
+  list_words = pattern_word_compiled.findall(html_unicode)
+  return list_words
+
+def CreeChemin1(path_file):   ### A partir d'un URL, creation d'une liste avec l'ensemble des URL de fichiers le constituant
+	l=[]
+	ListeDossier=os.listdir(path_file)
+	for x in ListeDossier:
+		newpath=os.path.join(path_file,x)
+		l.append(newpath)
+	return l
+
+#/media/USB/TP3/tp3_Bitton_Brossault/Corpus/Corpus d'entrainement/en
+#/media/USB/TP3/tp3_Bitton_Brossault/Corpus/
+def ressource_file(path_file,langue):
+    texte_ressource="ressource_"+langue+".txt"              ### on cree le fnom du fichier selon la langue desire
+    ressource=open(texte_ressource, "w")                ### on cree le fichier texte
+    l=CreeChemin1(path_file)                        ### on prend tout les fichier du corpus d'une langue
+    l_mot=[]                                        ## on cree une liste qui vas recuperer les mots des fichiers du corpus d'une langue
+    for x in l:                                 
+        Chaine=read_file(x)                     ### on lit chaque texte du corpus
+        sourcepage_unicode=unicode(Chaine,'utf-8')      ### on met en unicode
+        ChaineUnipropre=clean_unicode_html(sourcepage_unicode)  ### on nettoie
+        list_word=get_list_words(ChaineUnipropre)           ### on transforme en liste de mots
+    for x in list_word:
+        if x not in l_mot:              
+            l_mot.append(x)
+    ressource.write(json.dumps(l_mot))
+    ressource.close()
+        
+
+def prepare_file(path_file):
+    sourcepage=read_file(path_file)
+    sourcepage_unicode=unicode(sourcepage,'utf-8')
+    chaine_unipropre=clean_unicode_html(sourcepage_unicode)
+    lm_path_file=get_list_words(chaine_unipropre)
+    return lm_path_file
+    
+
+def find_lang_mot(path_file,ressource_file):   ### donne un reslultat sur les mots correspondants
+    nb_mot_pf=0                             ###nombre de mots du fichier
+    nb_mot_corres=0                         ###nombre de mots dans la ressource
+    res=0                                   ###nombre de mots apparraissant dans les 2 textes
+    txt_lang_inconnu=prepare_file(path_file)        ## on prepare le fichier dont on ne connait pas la langue
+    ressource=open(ressource_file, 'r')            ###il faut voir si on test les langue une par une ou toute d'un coup
+    fichier_ressource=json.load(ressource)      ### json.load permet de lire ce qu'il y a dans le fichier en respectant la classe de ce qu'il y a dans le fichier, ici une liste
+    for x in txt_lang_inconnu:
+        nb_mot_pf+=1                        ### on compte le nombre de mot dans le texte inconnu
+    for x in fichier_ressource:
+        nb_mot_corres+=1                    ### meme chose avec la ressource 
+    for x in txt_lang_inconnu:
+        if x in fichier_ressource:
+            res+=1                    ### on compte combien de mots sont dans les 2 textes (on ressort un pourcentage dans le return)
+    return "il y a",nb_mot_pf,"mots dans le texte et",nb_mot_corres,"mots dans la ressource",(float(res)/nb_mot_pf)*100,"% de mots correspondants"
+
+
+def seg_trigramme(_file): ### A partir du fichier d' une langue, creation d'une liste de trigramme ==> Notre ressource
+    l_trigramme=[]
+    Chaine=read_file(_file)
+    sourcepage_unicode=unicode(Chaine,'utf-8')
+    ChaineUnipropre=clean_unicode_html(sourcepage_unicode)
+    for i in xrange(0,(len(ChaineUnipropre)-2)):
+        l_trigramme.append(ChaineUnipropre[i:i+3])
+    return list(set(l_trigramme)) # on enleve les doublons presents dans l_trigramme
+
+### Ma reference de test : URL="C:\\Users\\Simon\\Dropbox\\Cours L2 INFO 2012-2013\\LTAL\\TP3\\tp3_Bitton_Brossault\\Corpus\\Corpus de test\\fi\\"
+
+        ### j'ai touche a la fonction trigramme mais pour l'instant c'est pas bon
+def All_seg_trigramme(path_file,langue):
+    #path_file=".\\Corpus\\Corpus d'entrainement"
+    l=CreeChemin1(path_file) # J'ai mon repertoire avec les dossiers propres a chaque langue
+    l_complete_trigramme=[]
+    for x in l : # x : les differents URL dans le dossier
+        new_fichier_trigramme='./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme' + "_" + langue
+        a=open(new_fichier_trigramme,"w") # Creation du fichier ou sera stocke la liste des trigrammes
+        l_file=CreeChemin1(path_file) # Liste des fichiers presents dans le dossier de langue : de, fi, fr, ... .
+        for x in l_file :
+            l_trigramme=seg_trigramme(x)
+            for x in l_trigramme:
+                if x not in l_complete_trigramme:
+                    l_complete_trigramme.append(x)
+            #l_complete_trigramme.append(seg_trigramme(x))
+        a.write(json.dumps(l_complete_trigramme)) #i.encode('utf-8').lower())# .write ne prend pas en compte une chaine de type unicode mais une chaine de type string : d'ou .encode permet de faire la transition de l'unicode au str
+        a.close()
+
+
+                
+def find_lang_trigramme(path_file,ressource_trigramme_file):
+    nb_tri_pf=0
+    nb_tri_ressource=0
+    res=0
+    path_file_trigramme=seg_trigramme(path_file)
+    trigramme_ressource1=open(ressource_trigramme_file,'r')
+    trigramme_ressource2=json.load(trigramme_ressource1)
+    for x in trigramme_ressource2:
+        for x in x:
+            nb_tri_ressource+=1
+    for x in path_file_trigramme:        
+        nb_tri_pf+=1
+    for x in trigramme_ressource2:
+        if x in path_file_trigramme:
+            res+=1
+    return "il y a",nb_tri_pf,"trigrammes dans le texte et",nb_tri_ressource,"trigrammes dans la ressource",(float(res)/nb_tri_pf)*100,"% de trigrammes correspondants"
+    
+
+
+def seg_suffixe(_file):
+    l_suffixe=[]
+    Chaine=read_file(_file)
+    sourcepage_unicode=unicode(Chaine,'utf-8')
+    ChaineUnipropre=clean_unicode_html(sourcepage_unicode)
+    liste_mots=get_list_words(ChaineUnipropre)
+    for i in liste_mots :
+        l_suffixe.append(i[-3:])
+    return list(set(l_suffixe))
+
+
+
+def All_seg_suffixe(path_file):
+    #path_file=".\\Corpus\\Corpus d'entrainement"
+    l_complete_suffixe=[]
+    l=CreeChemin1(path_file) # J'ai mon repertoire avec les dossiers propres a chaque langue
+    for x in l : # x : les differents URL dans le dossier
+        langue=os.path.basename(x) #Nom du dernier dossier en fin d'URL
+        a=open('.\\Ressources\\Segmentation_en_Suffixes\\Folder_Suffixe' + "_" + langue,"w") # Creation du fichier ou sera stocke la liste des trigrammes
+        l_file=CreeChemin1(x) # Liste des fichiers presents dans le dossier de langue : de, fi, fr, ... .
+        for x in l_file :
+            l_suffixe=seg_suffixe(x)
+            l_complete_suffixe=l_complete_suffixe+l_suffixe
+        l_complete_suffixe=list(set(l_complete_suffixe))
+        for i in l_complete_suffixe :
+            a.write(i.encode('utf-8').lower() + '\n') # .write ne prend pas en compte une chaine de type unicode mais une chaine de type string : d'ou .encode permet de faire la transition de l'unicode au str
+        a.close()
+
+
+                
+def find_lang_suffixe(path_file,ressource_suffixe_file):
+    nb_suf_pf=0
+    nb_suf_ressource=0
+    res=0
+    l_suffixe_ressource=[]
+    path_file_suffixe=seg_suffixe(path_file)
+    suffixe_ressource1=open(ressource_suffixe_file,'r')
+    #suffixe_ressource2=json.load(suffixe_ressource1)
+    for x in suffixe_ressource1:
+            nb_suf_ressource+=1
+            l_suffixe_ressource+=x
+    for x in path_file_suffixe:        
+        nb_suf_pf+=1
+    for x in path_file_suffixe:
+        if x in l_suffixe_ressource:
+            res+=1
+    return "il y a",nb_suf_pf,"suffixes dans le texte et",nb_suf_ressource,"suffixes dans la ressource",(float(res)/nb_suf_pf)*100,"% de suffixes correspondants"
+        
+
+
+
+
+
+		
+def traitement(path_file):
+    print " test francais "
+    test_mot1=find_lang_mot(path_file,"./Ressources/ressource/ressource_fr/ressource_fr.txt")
+    test_trigramme1=find_lang_trigramme(path_file,"./Ressources/Segmentation en Trigrammes/Folder_Trigramme_fr")
+    test_suffixe1=find_lang_suffixe(path_file,"./Ressources/Segmentation en Suffixes/Folder_Suffixe_fr")
+    print test_mot1
+    print test_trigramme1
+    print test_suffixe1
+    print " test anglais "
+    test_mot2=find_lang_mot(path_file,"./Ressources/ressource/ressource_en/ressource_en.txt")
+    test_trigramme2=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_en")
+    test_suffixe2=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_en")
+    print test_mot2
+    print test_trigramme2
+    print test_suffixe2
+    print " test allemand "
+    test_mot3=find_lang_mot(path_file,"./Ressources/ressource/ressource_de/ressource_de.txt")
+    test_trigramme3=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_de")
+    test_suffixe3=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_de")
+    print test_mot3
+    print test_trigramme3
+    print test_suffixe3
+    print " test espagnol "
+    test_mot4=find_lang_mot(path_file,"./Ressources/ressource/ressource_es/ressource_es.txt")
+    test_trigramme4=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_es")
+    test_suffixe4=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_es")
+    print test_mot4
+    print test_trigramme4
+    print test_suffixe4
+    print " test letton "
+    test_mot5=find_lang_mot(path_file,"./Ressources/ressource/ressource_lt/ressource_lt.txt")
+    test_trigramme5=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_lt")
+    test_suffixe5=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_lt")
+    print test_mot5
+    print test_trigramme5
+    print test_suffixe5
+    print " test neerlandais "
+    test_mot6=find_lang_mot(path_file,"./Ressources/ressource/ressource_nl/ressource_nl.txt")
+    test_trigramme6=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_nl")
+    test_suffixe6=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_nl")
+    print test_mot6
+    print test_trigramme6
+    print test_suffixe6
+
+
+def analyseur_zipf(path_file):
+    print " test francais "
+    test_mot1=find_lang_mot(path_file,"./Ressources/ressource/ressource_fr/ressource_fr.txt")
+    print test_mot1
+    print " test anglais "
+    test_mot2=find_lang_mot(path_file,"./Ressources/ressource/ressource_en/ressource_en.txt")
+    print test_mot2
+    print " test allemand "
+    test_mot3=find_lang_mot(path_file,"./Ressources/ressource/ressource_de/ressource_de.txt")
+    print test_mot3
+    print " test espagnol "
+    test_mot4=find_lang_mot(path_file,"./Ressources/ressource/ressource_es/ressource_es.txt")
+    print test_mot4
+    print " test letton "
+    test_mot5=find_lang_mot(path_file,"./Ressources/ressource/ressource_lt/ressource_lt.txt")
+    print test_mot5
+    print " test neerlandais "
+    test_mot6=find_lang_mot(path_file,"./Ressources/ressource/ressource_nl/ressource_nl.txt")
+    print test_mot6
+
+
+def analyseur_trigramme(path_file):
+    print " test francais "
+    test_trigramme1=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_fr")
+    print test_trigramme1
+    print " test anglais "
+    test_trigramme2=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_en")
+    print test_trigramme2
+    print " test allemand "
+    test_trigramme3=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_de")
+    print test_trigramme3
+    print " test espagnol "
+    test_trigramme4=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_es")
+    print test_trigramme4
+    print " test letton "
+    test_trigramme5=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_lt")
+    print test_trigramme5
+    print " test neerlandais "
+    test_trigramme6=find_lang_trigramme(path_file,"./Ressources/Segmentation_en_Trigrammes/Folder_Trigramme_nl")
+    print test_trigramme6
+
+
+def analyseur_suffixe(path_file):
+    print " test francais "
+    test_suffixe1=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_fr")
+    print test_suffixe1
+    print " test anglais "
+    test_suffixe2=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_en")
+    print test_suffixe2
+    print " test allemand "
+    test_suffixe3=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_de")
+    print test_suffixe3
+    print " test espagnol "
+    test_suffixe4=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_es")
+    print test_suffixe4
+    print " test letton "
+    test_suffixe5=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_lt")
+    print test_suffixe5
+    print " test neerlandais "
+    test_suffixe6=find_lang_suffixe(path_file,"./Ressources/Segmentation_en_Suffixes/Folder_Suffixe_nl")
+    print test_suffixe6
+
+ 
+ 
+### chaine de traitement
+
+def det_co():
+	x=sys.argv
+	if x[1] == 'zipf':
+		analyseur_zipf(x[2])
+	if x[1] == 'trig':
+		analyseur_trigramme(x[2])
+	if x[1] == 'suff':
+		analyseur_suffixe(x[2])
+		
+    
+det_co()
+
+
+

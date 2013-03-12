@@ -1,0 +1,246 @@
+#!/usr/bin/env python
+# -*- coding: utf8 -*-
+
+import re
+import os
+import os.path # Import pour la gestion des fichiers
+import sys
+import string
+import random
+from matplotlib import pyplot as plt  # Imports pour les graphes
+import numpy as np
+
+
+
+#### Fonctions ____________________________________________________________________________________________
+
+    
+def read_file(path_file) :    ### fonction lire le fichier
+    f=open(path_file,'r')
+    sourcepage=f.read()
+    f.close()
+    return sourcepage
+    
+
+def source2encoding(sourcepage) :      ### fonction detecter l'encoding
+    default_encoding='utf-8'
+    detection_encoding=u'charset=["\']?(.*?)["\']'
+    compiler=re.compile(detection_encoding, re.I)
+    match_charset=re.search(compiler, sourcepage)
+    if match_charset:
+        encoding=string.lower(match_charset.group(1))
+        print 'Encoding ::', encoding.encode('utf-8')
+    else :
+        encoding=detection_encoding
+        print 'charset non detecte, charset par default ::', default_encoding
+    return encoding
+
+
+def clean_unicode_html(sourcepage_unicode) :	  ### nettoyage des entitées html				###clean html	
+    clean_html = re.sub(u'&nbsp;', ' ', sourcepage_unicode)
+    clean_html = re.sub(u'[\s]+', u' ', clean_html)
+    pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+    clean_html = pattern1.sub(u'', clean_html)
+    pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+    clean_html = pattern2.sub(u'', clean_html)
+    pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+    clean_html = pattern3.sub(u'', clean_html)
+    pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+    clean_html = pattern4.sub(u'', clean_html)
+    clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+    pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+    clean_html = pattern5.sub(u' # ', clean_html)
+    pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+    clean_html = pattern6.sub(u' # ', clean_html)
+    return clean_html
+
+
+def get_list_words(html_unicode) :              ### texte ==> liste de mots
+  pattern_word = u'[A-Za-z]+'
+  pattern_word_compiled = re.compile(pattern_word)
+  list_words = pattern_word_compiled.findall(html_unicode)
+  return list_words
+
+### Fonction de test concernant l'encoding ____________________________________________________________
+
+def test(path_file):
+    s1=read_file(path_file)   
+    s2=source2encoding(s1)
+
+### preparation du fichier ___________________________________________________________________________
+
+def prepare_file(path_file):
+    s1=read_file(path_file)   
+    s2=source2encoding(s1)
+    print "source2encoding :",s2
+    s3=unicode(s1,s2)
+    s4=clean_unicode_html(s3)
+    return get_list_words(s4)
+
+
+### QUESTION 1 _______________________________________________________________________________________
+
+
+def l_mot_diff(path_file): # Liste des mots différents de la liste de mots du texte
+    lm=prepare_file(path_file)
+    l2=[]
+    for x in lm:
+        if x not in l2:
+            l2+=[x]
+    return l2
+
+def Nb_Occ_mot_l(mot,l):# Nombre d'ocurences d'un mot dans une liste
+    return l.count(mot)
+
+def occ_mots(lm): # nombre d'occurence de chaque mot dans la liste de mots du texte
+    l1=l_mot_diff(lm)
+    i=0
+    t=0
+    l2=[]
+    while i<=(len(l1)-1):
+        t=(Nb_Occ_mot_l(l1[i],lm),l1[i])
+        i+=1
+        l2+=[t]
+    return sorted(l2) # renvoie le nb d'occ de chaque mot trié par ordre croissant
+
+def result(path_file): # Fonction définissant f(1), f(10), f(100), f(1000)
+    lm=prepare_file(path_file)
+    l=occ_mots(lm)
+    print "f(1)=" + str(l[1])
+    print "f(10)=" + str(l[10])
+    print "f(100)=" + str(l[100])
+    print "f(1000)=" + str(l[1000])
+
+
+
+### QUESTION 2 ______________________________________________________________________________________
+
+def occ_mots_inverse(lm): # Nombre d'occurence de chaque mot dans la liste de mots du texte (inversé)
+    l1=l_mot_diff(lm)
+    i=0
+    t=0
+    l2=[]
+    while i<=(len(l1)-1):
+        t=(Nb_Occ_mot_l(l1[i],lm),l1[i],len(l1[i])) # Plus nombre de lettre dans le mot
+        i+=1
+        l2+=[t]
+    return sorted(l2,reverse=True) # Trié par ordre décroissant d'occurrence
+
+
+
+### QUESTION 3 ________________________________________________________________________________________
+
+
+
+
+def l_carac(lm): # Renvoie tout les caractères du texte
+    l2=[]
+    for x in lm:
+        l2+=x
+    return l2    
+
+
+def l_carac_diff(lm): # Renvoie tout les caractères différents du texte
+    l1=l_mot_diff(lm)
+    l2=[]
+    l3=[]
+    for x in l1:
+        l2+=x.lower()
+    sorted(l2,reverse=False)
+    
+    for x in l2:
+        if x not in l3:
+            l3+=[x]
+    return l3
+
+    
+### QUESTION 4 __________________________________________________________________________________________
+
+
+def combien_mots(liste_mot): # Combien de mots dans la liste de mots
+    res=0
+    for x in liste_mot:
+        res+=1
+    print "il y a", res ,"mots dans ce texte ."
+
+def cb_mot_diff(liste_mot): # combien de mots différents dans la liste de mots
+    l2,res=[],0
+    for x in liste_mot:
+        if x not in l2:
+            l2+=[x]
+    return combien_mots(l2)
+
+
+
+### Afficher le graphe de la fonction "f(rang)=effectif" _________________________________________________
+
+
+def plot_graphics(): # Trace une courbe de chaque issue de chaque sous dossier du Corpus
+    l,l_name_legend=take_file()
+    for i in l :
+        url='G:\\Cours L2 INFO. 2012-2013\\LTAL\\TP1_et_2\\Corpus\\' + str(i)
+        lm=prepare_file(url) # liste de mots issue de get_list_word
+        l_eff=[] # Liste regroupant tous les effectifs d'occurences
+        rg=len(lm)  # La taille de la liste des mots correspond au rang final.
+        x=np.arange(rg) # Obtention de mes abscisses pour la construction du graphe
+        for mot in lm:  # A partir de la fonction comptant le nombre d'occurences des mots, je prélève juste le nb d'oocurence que je met dans une liste
+            l_eff.append(Nb_Occ_mot_l(mot,lm))
+            l_eff=sorted(l_eff,reverse=True) # Je trie le nb d occurences dans le sens inverse ( le plus grand nb d'occurence correspond au rang 1 et ainsi de suite )
+        y=np.array(l_eff) # Obtention de mes ordonnées pour la constructin du graphe
+        plt.plot(x,y,'-')  # je trace
+    plt.legend([i for i in l_name_legend])
+    plt.xlabel('Axe des abscisses') # Je nomme l'axe des abscisses
+    plt.ylabel(u'Axe des ordonnées') # Je nomme l'axe des ordonnées
+    plt.title('Loi de Zipf')  # Je donne un titre
+    plt.loglog(x,y) # Echelle Logarithmique
+    plt.show()  # J'affiche
+
+def take_file(): # Permet d'avoir de manière aléatoire un fichier par langue au sein du Corpus
+    l_name_legend=[]
+    l_folder=os.listdir('G:\\Cours L2 INFO. 2012-2013\\LTAL\\TP1_et_2\\Corpus\\') # Donne une liste des fichiers ou dossiers présents dans le répertoire mentionné en argument
+    l=[] # Création d'une liste vide pour accueiller les différentes chaînes de fin d'URL 
+    for i in range(len(l_folder)):
+        url='G:\\Cours L2 INFO. 2012-2013\\LTAL\\TP1_et_2\\Corpus\\' + str(l_folder[i]) 
+        l_file=os.listdir(url)  # Donne une liste des fichiers ou dossiers présents dans le répertoire mentionné en argument
+        l.append(str(l_folder[i]) + '\\' + l_file[random.randrange(0,len(l_file))])
+        l_name_legend.append(str(l_folder[i]))
+    return l,l_name_legend
+
+def plot_one_graphic(path_file): # Trace une courbe d'un fichier html choisi
+    lm=prepare_file(path_file) # liste de mots issue de get_list_word
+    l_eff=[] # Liste regroupant tous les effectifs d'occurences
+    rg=len(lm)  # La taille de la liste des mots correspond au rang final.
+    x=np.arange(rg) # Obtention de mes abscisses pour la construction du graphe
+    for mot in lm:  # A partir de la fonction comptant le nombre d'occurences des mots, je prélève juste le nb d'oocurence que je met dans une liste
+        l_eff.append(Nb_Occ_mot_l(mot,lm))
+        l_eff=sorted(l_eff,reverse=True) # Je trie le nb d occurences dans le sens inverse ( le plus grand nb d'occurence correspond au rang 1 et ainsi de suite )
+    y=np.array(l_eff) # Obtention de mes ordonnées pour la constructin du graphe
+    plt.xlabel('Axe des abscisses') # Je nomme l'axe des abscisses
+    plt.ylabel(u'Axe des ordonnées') # Je nomme l'axe des ordonnées
+    plt.title('Loi de Zipf')  # Je donne un titre
+    plt.plot(x,y)  # je trace
+    plt.loglog(x,y) # Echelle Logarithmique
+    plt.show()  # J'affiche
+
+def plot_caractere(path_file):
+    lm=prepare_file(path_file)
+    l_car=l_carac(lm)
+    print l_car
+
+
+
+##### Question 1 ###                                      
+
+print result('Corpus/fr/fr_1.htm')
+##### Question 2 ###
+#q2=occ_mots_inverse(s5)
+
+##### Question 3 ###          ## problème avec les majuscules 
+##q3=l_carac_diff(s5)
+##
+##### Question 4 ###
+##q41=combien_mots(s5)
+##q42=cb_mot_diff(s5)
+##
+
+

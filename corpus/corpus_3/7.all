@@ -1,0 +1,354 @@
+# -*- coding: utf-8 -*-
+
+import re
+import os
+import sys
+import string
+import glob
+
+def lirefichier(fichier) :
+    fic=open(fichier, "r")
+    texte=fic.read()
+    fic.close()
+    return texte
+
+def detecteencoding(texte) :
+    return "utf-8"
+
+def convertir_unicode(texte, encoding) :
+    return unicode(texte, encoding)
+
+def nettoyer_html(texteunicode) :
+    clean_html = re.sub(u'&nbsp;', ' ', texteunicode)
+    clean_html = re.sub(u'[\s]+', u' ', clean_html)
+    clean_html = re.sub(u'&eacute;', u'é', clean_html)
+    clean_html = re.sub(u'&egrave;', u'è', clean_html)
+    clean_html = re.sub(u'&agrave;', u'à', clean_html)
+    clean_html = re.sub(u'&ecirc;', u'ê', clean_html)
+    clean_html = re.sub(u'&ccedil;', u'ç', clean_html)
+    clean_html = re.sub(u'&ocirc;', u'é', clean_html)
+    clean_html = re.sub(u'&Eacute;', u'É', clean_html)
+    
+
+    pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+    clean_html = pattern1.sub(u'', clean_html)
+
+    pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+    clean_html = pattern2.sub(u'', clean_html)
+
+    pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+    clean_html = pattern3.sub(u'', clean_html)
+
+    pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+    clean_html = pattern4.sub(u'', clean_html)
+
+    clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+    pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+    clean_html = pattern5.sub(u' # ', clean_html)
+
+    pattern41 = re.compile(u'".+?>', re.I | re.M)
+    clean_html = pattern41.sub(u'', clean_html)
+
+    pattern42 = re.compile(u'&(copy|mdash|laquo|raquo|quot);', re.I | re.M)
+    clean_html = pattern42.sub(u'', clean_html)
+
+    pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+    clean_html = pattern6.sub(u' # ', clean_html)
+
+    return clean_html
+
+def coupe_paragraph(txtunicode) :
+    pattern = u'([^#|]+)'
+    pattern_compiled = re.compile(pattern, re.U)
+    list_paragraph = pattern_compiled.findall(txtunicode)
+    return list_paragraph
+
+def coupe_mot(txtunicode) :
+    pattern1=u'(\w{3,}[\'-])?'
+    pattern2=u'(\w)+'
+    pattern_word = u'(%s%s)' %(pattern1, pattern2)
+    pattern_word_compiled = re.compile(pattern_word, re.U)
+    list_words = pattern_word_compiled.findall(txtunicode)
+    return [words[0] for words in list_words]
+
+def coupe_car(txtunicode) :
+    pattern_car = u'([A-Za-z0-9 ,.?;:!¡¿])'
+    pattern_car_compiled = re.compile(pattern_car, re.U)
+    list_cars = pattern_car_compiled.findall(txtunicode)
+    return list_cars
+
+def get_n_gram(l, n) :
+    d={}
+    for su in l :
+        lw=coupe_mot(su)
+        len_w=len(lw)
+        for i in xrange(len_w-n+1) :
+            ln_gram=lw[i:i+n]
+            n_gram=tuple(ln_gram)
+            if n_gram not in d :
+                d[n_gram]=0
+            d[n_gram]+=1
+    return d
+
+def get_n_gram_carac(l, n) :
+    d={}
+    for su in l :
+        lc=coupe_car(su)
+        len_w=len(lc)
+        for i in xrange(len_w-n+1) :
+            ln_gram=lc[i:i+n]
+            n_gram=tuple(ln_gram)
+            if n_gram not in d :
+                d[n_gram]=0
+            d[n_gram]+=1
+    return d
+
+def filtrer_dic(d) :
+    d_filtre={}
+    for cle in d :
+        if d[cle]>1 and len(cle)>1 :
+            d_filtre[cle]=d[cle]
+    return d_filtre
+
+def all_n_gram_carac(l) :
+    d={}
+    n=1
+    b=True
+    while b or n==2 :
+        dng=get_n_gram_carac(l, n)
+        n+=1
+        f_dng=filtrer_dic(dng)
+        d.update(f_dng)
+        b=not(f_dng=={})
+    return d
+
+def get_suffixe(l) :
+    d={}
+    for su in l :
+        lw=coupe_mot(su)
+        for mot in lw :
+            if len(mot)>=3 :
+                suf=mot[-3:]
+            else :
+                suf=mot
+            if suf not in d :
+                d[suf]=0
+            d[suf]+=1
+    return d
+
+def plusgrand(liste) :
+    if liste==[] :
+        return (0, 0)
+    cour=liste[0]
+    for tupl in liste :
+        if tupl[1]>cour[1] :
+            cour=tupl
+    return cour
+
+def trier(liste) :
+    res=[]
+    maxi=plusgrand(liste)
+    for i in range(maxi[1]+1) :
+        res=res+[t for t in liste if t[1]==maxi[1]-i]
+    return res
+
+def moy_dic(dic) :
+    res=0
+    for _,n in dic.iteritems() :
+        res+=n
+    return res/float(len(dic))
+
+def addition_dict(d1, d2) :
+    for cle in d2 :
+        d1[cle]=d1.get(cle, 0)+d2[cle]
+    return d1
+
+def creer_ressources_zipf() :
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        expr="corpus/entrainement/%s/*" %(langue)
+        sort="ressources/zipf/%s.txt" %(langue)
+        d={}
+        for path in glob.glob(expr) :
+            txt=lirefichier(path)
+            encoding=detecteencoding(txt)
+            txtuni=convertir_unicode(txt, encoding)
+            txtunicode=nettoyer_html(txtuni)
+            listep=coupe_paragraph(txtunicode)
+            d_doc=get_n_gram(listep, 1)
+            d=addition_dict(d, d_doc)
+
+        sortie=open(sort, "w")
+        liste=[(mot,eff) for mot, eff in d.iteritems()]
+        liste=trier(liste)
+        for i in range(int(len(liste)/200.0)) :
+            sortie.write((liste[i][0][0]).encode("utf-8")+"\n")
+        sortie.close()
+
+def creer_ressources_trigramme() :
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        expr="corpus/entrainement/%s/*" %(langue)
+        sort="ressources/trigramme/%s.txt" %(langue)
+        d={}
+        for path in glob.glob(expr) :
+            txt=lirefichier(path)
+            encoding=detecteencoding(txt)
+            txtuni=convertir_unicode(txt, encoding)
+            txtunicode=nettoyer_html(txtuni)
+            listep=coupe_paragraph(txtunicode)
+            d_doc=get_n_gram_carac(listep, 3)
+            d=addition_dict(d, d_doc)
+
+        sortie=open(sort, "w")
+        liste=[(mot,eff) for mot, eff in d.iteritems()]
+        liste=trier(liste)
+        premier=liste[0][1]
+        i=0
+        for i in range(int(len(liste)/100.0)) :
+            sortie.write((liste[i][0][0]+liste[i][0][1]+liste[i][0][2]).encode("utf-8")+"\n")
+        sortie.close()
+
+def creer_ressources_suffixe() :
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        expr="corpus/entrainement/%s/*" %(langue)
+        sort="ressources/suffixe/%s.txt" %(langue)
+        d={}
+        for path in glob.glob(expr) :
+            txt=lirefichier(path)
+            encoding=detecteencoding(txt)
+            txtuni=convertir_unicode(txt, encoding)
+            txtunicode=nettoyer_html(txtuni)
+            listep=coupe_paragraph(txtunicode)
+            d_doc=get_suffixe(listep)
+            d=addition_dict(d, d_doc)
+
+        sortie=open(sort, "w")
+        liste=[(mot,eff) for mot, eff in d.iteritems()]
+        liste=trier(liste)
+        for i in range(int(len(liste)/50.0)) :
+            sortie.write(liste[i][0].encode("utf-8")+"\n")
+        sortie.close()
+
+def diagnostic_zipf(doc, ressources) :
+    txt=lirefichier(doc)
+    encoding=detecteencoding(txt)
+    txtuni=convertir_unicode(txt, encoding)
+    txtunicode=nettoyer_html(txtuni)
+    listep=coupe_paragraph(txtunicode)
+    d=get_n_gram(listep, 1)
+    liste=[(mot,eff) for mot, eff in d.iteritems()]
+    liste=trier(liste)
+    liste_premier=[]
+    for i in range(int(len(liste)/20.0)) :
+        liste_premier.append(liste[i][0][0])
+    d_resultat={}
+    
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        ressource=ressources+"/"+langue+".txt"
+        ref=open(ressource,"r")
+        d_resultat[langue]=0
+        for mot in ref.readlines() :
+            if convertir_unicode(mot[:-1], "utf-8") in liste_premier :
+                d_resultat[langue]+=1
+    return d_resultat
+
+def diagnostic_trigramme(doc, ressources) :
+    txt=lirefichier(doc)
+    encoding=detecteencoding(txt)
+    txtuni=convertir_unicode(txt, encoding)
+    txtunicode=nettoyer_html(txtuni)
+    listep=coupe_paragraph(txtunicode)
+    d=get_n_gram_carac(listep, 3)
+    liste=[(mot,eff) for mot, eff in d.iteritems()]
+    liste=trier(liste)
+    liste_premier=[]
+    for i in range(int(len(liste)/10.0)) :
+        liste_premier.append(liste[i][0][0]+liste[i][0][1]+liste[i][0][2])
+    d_resultat={}
+    
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        ressource=ressources+"/"+langue+".txt"
+        ref=open(ressource,"r")
+        d_resultat[langue]=0
+        for mot in ref.readlines() :
+            if convertir_unicode(mot[:-1], "utf-8") in liste_premier :
+                d_resultat[langue]+=1
+    return d_resultat
+
+def diagnostic_suffixe(doc, ressources) :
+    txt=lirefichier(doc)
+    encoding=detecteencoding(txt)
+    txtuni=convertir_unicode(txt, encoding)
+    txtunicode=nettoyer_html(txtuni)
+    listep=coupe_paragraph(txtunicode)
+    d=get_suffixe(listep)
+    liste=[(mot,eff) for mot, eff in d.iteritems()]
+    liste=trier(liste)
+    liste_premier=[]
+    for i in range(int(len(liste)/10.0)) :
+        liste_premier.append(liste[i][0])
+    d_resultat={}
+    
+    for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+        ressource=ressources+"/"+langue+".txt"
+        ref=open(ressource,"r")
+        d_resultat[langue]=0
+        for mot in ref.readlines() :
+            if convertir_unicode(mot[:-1], "utf-8") in liste_premier :
+                d_resultat[langue]+=1
+    return d_resultat
+
+def diagnostic(doc, ressources, methode) :
+    if methode=="zipf" :
+        diag=diagnostic_zipf(doc, ressources)
+    if methode=="trigramme" :
+        diag=diagnostic_trigramme(doc, ressources)
+    if methode=="suffixe" :
+        diag=diagnostic_suffixe(doc, ressources)
+    liste=[(mot,eff) for mot, eff in diag.iteritems()]
+    liste=trier(liste)
+    if liste[0][1]>=liste[1][1]*1.5 :
+        return (liste[0][0], liste)
+    return ("incertain", liste)
+
+def calcul_raprec() :
+    for methode in ["zipf", "trigramme", "suffixe"] :
+        precision=0
+        rappel=0
+        total=0
+        a={"francais":0, "anglais":0, "allemand":0, "espagnol":0, "neerlandais":0, "lituanien":0}
+        b={"francais":0, "anglais":0, "allemand":0, "espagnol":0, "neerlandais":0, "lituanien":0}
+        c={"francais":0, "anglais":0, "allemand":0, "espagnol":0, "neerlandais":0, "lituanien":0}
+        for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+                expr="corpus/test/%s/*" %(langue)
+                for path in glob.glob(expr) :
+                    total+=1
+                    diag=diagnostic(path, "ressources/%s" %(methode), methode)
+                    if diag[0]==langue :
+                        a[langue]+=1
+                    elif diag[0] in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+                        b[diag[0]]+=1
+                        c[langue]+=1
+        for langue in ["francais", "anglais", "allemand", "espagnol", "neerlandais", "lituanien"] :
+            precision+=float(a[langue])/(a[langue]+b[langue])
+            rappel+=float(a[langue])/(a[langue]+c[langue])
+        precision=precision/6.0
+        rappel=rappel/6.0
+        f_mesure=float(2*rappel*precision)/(rappel+precision)
+        fichier=open(methode+".txt", "w")
+        fichier.write("Précision : "+str(precision)+"\n")
+        fichier.write("Rappel : "+str(rappel)+"\n")
+        fichier.write("F-mesure : "+str(f_mesure)+"\n")
+        at=moy_dic(a)
+        bt=moy_dic(b)
+        ct=moy_dic(c)
+        dt=total-at-bt-ct
+        fichier.write("A : "+str(at)+"\n")
+        fichier.write("B : "+str(bt)+"\n")
+        fichier.write("C : "+str(ct)+"\n")
+        fichier.write("D : "+str(dt)+"\n")
+        fichier.close()
+
+methode=sys.argv[1]
+fichier=sys.argv[2]
+print diagnostic(fichier, "ressources/"+methode, methode)

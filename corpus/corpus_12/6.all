@@ -1,0 +1,448 @@
+# -*- coding: utf-8 -*-
+import re,string,chardet
+
+
+
+def comp((a,b),(c,d)):
+	return b-d
+	
+class Fichier:
+	"""
+	Classe qui gére l'encodage,la lecture et l'écriture du fichier html
+	"""
+	def __init__(self,fichier):
+		self.fichier=fichier
+		self.ch_mod=""
+		self.encoding=""
+		
+	def find_enc(self) :
+	  default_encoding = 'iso-8859-1'
+	  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.+?)["\']'
+	  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+	  match_charset = re.search(pattern_compiled, self.ch_mod)
+	  if match_charset :
+		encoding = string.lower(match_charset.group(1))
+		print 'detected charset ::', encoding.encode('utf-8')
+	  else :
+		encoding = default_encoding
+		print 'undetected charset, use default encoding ::', default_encoding
+	  self.encoding=encoding
+	  	
+	
+	def unicode_source(self):
+		self.ch_mod=unicode(self.ch_mod,self.encoding)
+		
+		
+	def read_file(self):
+		f=open(self.fichier,'r')
+		self.ch_mod=f.read()
+		f.close()
+
+	
+	  
+class Traitement(object):
+	"""
+	Classe qui gére le traitement de la source html
+	"""
+	def __init__(self,fichier,chinois=False):
+		if isinstance(fichier,Fichier):
+			self.file_html=fichier
+			if self.file_html.encoding == "":
+				self.file_html.read_file()
+				self.file_html.find_enc()
+				self.file_html.unicode_source()
+			self.chaine=self.file_html.ch_mod
+			self.listmot=[]
+			self.chinois=chinois
+		else:
+			return "Error :: Not Fichier type"
+	
+	def extract_title(self) :
+                pattcomp = re.compile(u'<title>(.+)<\/title>', re.I)
+                trouv_titre = re.search(pattcomp, self.chaine)
+                if trouv_titre:
+                        return trouv_titre.group(1)
+                return '::Title not found ::'
+	  
+	def clean_unicode_html(self) :
+		clean_html = re.sub(u'&nbsp;', ' ', self.chaine)
+		clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+		pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+		clean_html = pattern1.sub(u'', clean_html)
+
+		pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+		clean_html = pattern2.sub(u'', clean_html)
+
+		pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+		clean_html = pattern3.sub(u'', clean_html)
+
+		pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+		clean_html = pattern4.sub(u'', clean_html)
+
+		clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+		pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+		clean_html = pattern5.sub(u' # ', clean_html)
+
+		pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+		clean_html = pattern6.sub(u' # ', clean_html)
+		
+		pattern7 = re.compile(u'[&]?&eacute;', re.I | re.M)
+		clean_html = pattern7.sub(u'é', clean_html)
+		
+		self.chaine=clean_html
+	def sep_word(self):
+		res=[]
+		if self.chinois == True:
+			pat=u'.?'
+			
+		else:
+			pat=u'\w+'
+		x=re.compile(pat,re.I)
+		res=re.findall(x,self.chaine)
+		for i in res:
+			if i ==u'#':
+				del i
+		self.listmot=res
+	def sep_word_spe(self):
+		x=self.chaine.split()
+		res=x
+		for i in res:
+			if i ==u'#':
+				del i
+		self.listmot=res
+		
+
+class Stat(object):
+	def __init__(self,traitement,spe=False):
+		if isinstance(traitement,Traitement):
+			if traitement.listmot == []:
+				traitement.clean_unicode_html()
+				if spe:
+					traitement.sep_word_spe()
+				else:
+					traitement.sep_word()
+			self.liste=traitement.listmot
+			self.chaine=traitement.chaine
+				
+	def get_eff(self):
+		dico={}
+		for i in self.liste:
+			if dico.has_key(i):
+				dico[i]+=1
+			else:
+				dico[i]=1
+		self.liste=dico.items()
+		self.liste=sorted(self.liste,reverse=True,cmp=comp)
+		print self.liste
+
+
+#if __name__ == "__main__":
+	#t=Traitement(Fichier("corpus/finois1.htm"))
+	#v=Stat(t)
+	#x=v.liste
+	#c=get_n_gram(x,2)
+	#v.liste=dict_effectif2distrib_zipf(c)
+	#print v.liste
+	#v.pyplot()
+	#t.file_html.write_file('testfinois.txt',str(c))
+	
+	
+	
+	
+
+	
+	
+
+	
+import glob,re,matplotlib.pyplot as plt
+
+
+def ltuple2ul(l) :
+  s = ''
+  for t in l :
+    i = ''
+    for e in t :
+      i += '%s '%(e)
+    s += '<li>%s</li>'%(i)
+  return '<ul>%s</ul>'%s
+
+def list2ul(l) :
+  s = ''
+  for e in l :
+    s += '<li>%s</li>'%(e)
+  return '<ul>%s</ul>'%s
+
+def dict2ul(d) :
+  s = ''
+  for k,e in d.iteritems() :
+	i,j=re.sub('u\'','',str(k)),re.sub('u\'','',str(e)) 
+	s += '<li>%s :: %s</li>'%(i,j)
+  return '<ul>%s</ul>'%s
+  
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+  
+def file2l(path):
+	x=glob.glob("corpus/"+path+"/*.htm")
+	if x == []:
+		x=glob.glob("corpus/"+path+"/*.html")
+	return x
+def url2name(url):
+	n=re.sub("[A-Za-z0-9]*[/]+",'',url)
+	n=re.sub('.htm+l?','',n)
+	return n
+
+def write_file(nwfile,ch):
+	f=open(nwfile,'w')
+	f.write(ch)
+	f.close()
+def pyplot(l,output,dossier):
+	plt.plot(l)
+	plt.loglog()
+	plt.ylabel('effectif')
+	plt.xlabel('rang')
+	plt.savefig(dossier+'/'+output+'.png')
+	#return output+'.png'
+	plt.close()
+def get_n_gram(l,n):
+	d={}
+	for i in xrange(len(l)-n):
+		ngram=tuple(l[i:i+n])
+		if ngram not in d:
+			d[tuple(l[i:i+n])]=1
+		else:
+			d[tuple(l[i:i+n])]+=1
+	return d
+def get_all_gram(l):
+	d={}
+	n=1
+	b=True
+	while b:
+		dng=get_n_gram(l,n)
+		b=check(dng)
+		n+=1
+		d.update(dng)
+	return d
+	
+def check(dng):
+	b=False
+	for _,eff in dng.iteritems():
+		if eff>2:
+			return True
+	return b
+
+	
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+  l = []
+  for graphie,effectif in dict_effectif.iteritems() :
+    l.append(effectif)
+  l = sorted(l,reverse=True)
+  return l
+
+				
+def color_string(s_unicode, substring, color) :
+  #print 'color string : %s'%(substring.encode('utf-8'))
+  pattern1 = re.compile(u'%s'%(substring), re.I | re.M)
+  replace = u'<span style="color:%s; background-color:grey;">%s</span>'%(color, substring)
+  output = pattern1.sub(replace, s_unicode)
+  return output
+  
+def colortext(d,source_unicode):
+	u=""
+	for i in d:
+		for k in i:
+			u=u+" "+k
+		source_unicode=color_string(source_unicode,u,'#33FFFF')
+		u=""
+	return source_unicode
+def supr_1_gram(d):
+	g={}
+	for i in d:
+		if not d[i]==1:
+			g.update({i:d[i]})
+	return g
+
+# -*- coding: utf-8 -*-
+from tool import *
+from classe import *
+import os
+
+#---------------------------README----------------------------
+#Question 1_2_3
+"""
+question1_2_3('en','enstat','enstatp',False,False,True) :
+La fonction va créer un graphe à point(point=True du corpus anglais dans le dossier enstat
+qui s'appelle 'enstatp'.On précise avec les deux False que la langue est différente du 
+chinois(chinois =False) et différente du grec ou du russse(spe=False).
+"""
+#Fonction de Statistique
+"""
+stat_dossier('el',1,'elstat',False,True):
+La fonction va nous créer des fichiers html pour chaque fichier contenu dans le dossier donné.
+'el' désigne le dossier du corpus, 1 représente le nombre de mots à la suite dont on veut savoir l'effectif,
+'elstat' est le dossier de sortie, 'False' est pour dire que le corpus traité n'est pas du chinois, et le 'True' indique que
+l'on traite un corpus soit en russe soit en grec.
+"""
+# Fonction du nombres de mots et de mots différents
+"""
+affichequestion4():
+	Cette fonction va afficher tous les statistiques nécessaire à la réponse de la question 4.
+	Elle utilise la fonction question4 qui traite et renvoie une liste comprenant les résultats pour chaque corpus
+	de langue.
+"""
+
+def stat_dossier(lang,n,dossier,chinois=False,spe=False):
+	"""
+	Permet de faire les statistiques et les pages coloriés sur un dossier du corpus
+	"""
+	files=file2l(lang)
+	print files
+	try:
+		os.mkdir(dossier)
+		print "Dossier Créé"
+	except:
+		print "No Problem"
+	for i in files:
+		#on crée un nom a partir de l'url du fichier
+		name=url2name(i) 
+		
+		# on définit le chemin et le fichier de sortie
+		o_stat=dossier+'/'+"%sstat.html"%(name)
+		o_col=dossier+'/'+"%scolor.html"%(name)  
+		
+		#On crée Les instances objets nécessaire au traitement
+		fichier=Fichier(i)
+		tr=Traitement(fichier,chinois)
+		ch=tr.chaine
+		# on extrait le titre
+		title=tr.extract_title() 
+		s=Stat(tr,spe)
+		#on récupére les effectifs d'un groupe de n-mots
+		c=get_n_gram(s.liste,n)
+		j=get_n_gram(s.liste,2)
+		try:
+			html_col=colortext(j,ch)
+		except:
+			html_col="Echec"
+		#on récupére une liste qui permet l'affichage du graph avec Pyplot
+		l_eff=dict_effectif2distrib_zipf(c)
+
+
+		#On créer les différents parties du corps du fichier html
+		header=get_header_html()
+		mot=dict2ul(c)
+		pyplot(l_eff,name,dossier)
+		balise_img=u'<img src=\''+name+'.png\''+"/>"
+		footer=get_footer_html()
+		
+		html_unicode=header+title+u'<div style=\'float=left\'>'+balise_img+u'</div>'+mot+footer
+		#on encode la chaine de sortie en utf-8
+		html=html_unicode.encode('utf8')
+		html_col=html_col.encode('utf-8')
+		
+		#et on écrit dans le fichier
+		write_file(o_stat,html)
+		write_file(o_col,html_col)
+
+
+
+def question1_2_3(lang,dossier_o,output,chinois=False,spe=False,point=False):
+	"""
+	Permet la sortie des graphiques pour les questions 1,2,3.
+	"""
+	files=file2l(lang)
+	l_eff=[]
+	try:
+		os.mkdir(dossier_o)
+		print "Dossier Créé"
+	except:
+		print "No Problem"
+	import matplotlib.pyplot as plt
+	for i in files:
+		fichier=Fichier(i)
+		tr=Traitement(fichier,chinois)
+		s=Stat(tr,spe)
+		#on récupére les effectifs d'un groupe de n-mots
+		c=get_n_gram(s.liste,1)
+		#on récupére une liste qui permet l'affichage du graph avec Pyplot
+		l_eff+=[dict_effectif2distrib_zipf(c)]
+	for i in l_eff:
+		if point:
+			plt.plot(i,'bs')
+		else:
+			plt.plot(i,'b')
+	plt.loglog()
+	plt.ylabel('effectif')
+	plt.xlabel('rang')
+	plt.savefig(dossier_o+'/'+output+'.png')
+	plt.close()
+		
+def question4(lang,n,chinois=False,spe=False):
+	"""
+	Permet de compter combien il ya de mots et de mots différents
+	"""
+	files=file2l(lang)
+	l_fin=[]
+	for i in files:
+		fichier=Fichier(i)
+		tr=Traitement(fichier,chinois)
+		s=Stat(tr,spe)
+		#on récupére les effectifs d'un groupe de n-mots
+		c=get_n_gram(s.liste,n)
+		nb_mot=0
+		nb_mot_di=0
+		for i in c:
+			nb_mot+=c[i]
+			for j in i:
+				nb_mot_di+=1
+		l_fin+=[[i,nb_mot,nb_mot_di]]
+	res=[]
+	for i in l_fin:
+		x,y=i[1],i[2]
+		res+=[lang,'nb_mot->',x,'mot_dif->',y,'ratio->',float(x)/y]
+	return res
+	
+def affichequestion4():
+	lang=['fr','en','el','zh','de','fi','ru']
+	tab_lang=[]
+	for i in lang:
+		if i == 'zh':
+			tab_lang+=[question4(i,1,True)]
+		if i == 'el' or 'ru':
+			tab_lang+=[question4(i,1,False,True)]
+		else:
+			tab_lang+=[question4(i,1)]
+			
+	for i in tab_lang:
+		print i
+
+stat_dossier('fr',1,'frstat')
+stat_dossier('en',1,'enstat')
+stat_dossier('el',1,'elstat',False,True)
+stat_dossier('de',1,'destat')
+stat_dossier('ru',1,'rustat',False,True)
+stat_dossier('zh',1,'zhstat',True)
+stat_dossier('fi',1,'fistat')
+
+
+affichequestion4()
+

@@ -1,0 +1,348 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import os, sys, re, string, htmlentitydefs, chardet, glob
+import matplotlib.pyplot as plt
+
+
+def comp((a,b),(c,d)):
+	return b-d
+
+	
+
+class Fichier(object):
+	"""
+	Classe fichier qui contiendra toute les méthodes pour traiter 
+	les pages web
+	"""
+	def __init__(self,f):
+		"""
+		Initialise la classe
+		"""
+		self.url=f
+		self.s=""
+		self.encoding=""
+		self.listChaine=[]
+		self.nbmot=0
+		
+	def read_file(self) :
+		"""
+		Méthode qui permet de lire un fichier, prend en entrez l'url 
+		du fichier.
+		"""
+		f = open(self.url, 'r')
+		self.s = f.read()
+		f.close()
+		
+	def source2encoding(self):
+		"""
+		Méthode qui recherche l'encodage de la page web, essaie de 
+		détecter la balise de l'encodage.
+		En cas d'échec utilise la fonction chardet.
+		"""
+		default_encoding = 'iso-8859-1'
+		pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.+?)["\']'
+		pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+		match_charset = re.search(pattern_compiled, self.s)
+		if match_charset :
+			x=chardet.detect(self.s)
+			if string.lower(match_charset.group(1))==x:
+				self.encoding=x['encoding']
+			else :
+				self.encoding=string.lower(match_charset.group(1))
+			
+			
+	def source2unicode(self):
+		"""
+		Transforme en unicode le texte
+		"""
+		self.s=unicode(self.s,self.encoding)
+		
+	def write_file(self,newfile):
+		"""
+		Permet d'écrire dans un fichier
+		"""
+		f=open(newfile,'w')
+		f.write(self.s)
+		f.close()
+			
+	def clean_unicode_html(self) :
+		"""
+		Méthode qui permet de supprimer les balises inutiles pour le 
+		traitement et remplace les balises de bloc par des '#'
+		"""
+		clean_html = re.sub('&nbsp;', ' ', self.s)
+		clean_html = re.sub('[\s]+', ' ', clean_html)
+
+		pattern1 = re.compile('<script.+?</script>', re.I | re.M)
+		clean_html = pattern1.sub('', clean_html)
+
+		pattern2 = re.compile('<!\-\-.+?\-\->', re.M)
+		clean_html = pattern2.sub('', clean_html)
+
+		pattern3 = re.compile('<select.+?</select>', re.I | re.M)
+		clean_html = pattern3.sub('', clean_html)
+
+		pattern4 = re.compile('<style.+?</style>', re.I | re.M)
+		clean_html = pattern4.sub('', clean_html)
+
+		clean_html = re.sub('(?:&gt;|&lt;)', ' ', clean_html)
+
+		pattern5 = re.compile('[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+		clean_html = pattern5.sub(' # ', clean_html)
+
+		pattern6 = re.compile('\s[#\s]+', re.I | re.M)
+		clean_html = pattern6.sub(' # ', clean_html)
+		
+		pattern7 = re.compile('&eacute',re.I | re.M)
+		clean_html = pattern7.sub(u'é',clean_html)
+		
+		pattern8=re.compile(u'\xea',re.I | re.M)
+		clean_html=pattern8.sub(u'e',clean_html)
+  
+		self.s=clean_html
+
+	def cutBlock(self):
+		"""
+		Permet de découper le texte en bloc et retourne une liste
+		"""
+		x=''
+		for i in self.s:
+			if i!='#':
+				x+=i
+			if i=='#':
+				self.listChaine+=[x]
+				x=''
+	
+	def cutword(self,su):
+		"""
+		Méthode qui prends en entré une chaine de caractère et retourne 
+		la liste des mots de la chaine
+		"""
+		l=[]
+		s=""
+		for i in su:
+			if i!=' ':
+				s+=i
+			else:
+				l+=[s]
+				s=''
+		l+=[s]
+		return l		
+		
+	def get_n_mot(self,n):
+		"""
+		Méthode qui prends en entré le nombre n de mot à la suite à 
+		retourner. Retourne dans un dictionnaire la liste des tuples.
+		"""
+		d={}
+		for su in self.listChaine:
+			lw=self.cutword(su)
+			len_w=len(lw)
+			for i in xrange(len_w-n):
+				lngram=lw[i:i+n]
+				ngram=tuple(lngram)
+				if ngram not in d:
+					d[ngram]=0
+				d[ngram]+=1
+		return d
+				
+	def get_n_carac(self,n):
+		"""
+		Méthode qui renvoi les ngram de caractère dans un dictionnaire 
+		de tuples
+		"""
+		d={}
+		for su in self.listChaine:
+			lw=self.cutword(su)
+			for c in lw:
+				len_c=len(c)
+				for i in xrange(len_c-n):
+					lngram=c[i:i+n]
+					ngram=tuple(lngram)
+					if ngram not in d:
+						d[ngram]=0
+					d[ngram]+=1
+		return d
+				
+	def graph(self,l,name):
+		"""
+		Methode qui permet de créer un graphique à partir d'une liste 
+		et enregistre en .png
+		"""
+		liste=[]
+		for i in l:
+			liste=[]
+			for j in i:
+				liste+=[j[1]]
+			plt.plot(liste)
+			plt.loglog()
+			plt.ylabel('effectif')
+			plt.xlabel('rang')
+			plt.savefig(name+'.png')
+		plt.close()
+		
+	def nuagedepoint(self,l,name):
+		"""
+		Méthode qui permet de créer un nuage de point à partir d'une 
+		liste et enregistre en .png
+		"""
+		liste=[]
+		for i in l:
+			liste=[]
+			for j in i:
+				liste+=[j[1]]
+			plt.plot(liste,'bo')
+			plt.loglog()
+			plt.ylabel('effectif')
+			plt.xlabel('rang')
+			plt.savefig(name+'_np.png')
+
+		plt.close()
+		
+	def effectif(self,l):
+		"""
+		Renvoi le rapport entre le nombre de mots différents 
+		et le nombre de mot total.
+		"""
+		res=0
+		for i in l:
+			res+=i[1]
+		print res,len(l)
+		res=res/float(len(l))
+		print res
+		
+	def filter_dict(self,d):
+		"""
+		Méthode qui permet de renvoyer un dictionnaire filtré 
+		des clé inférieur à une lettre
+		"""
+		filtared_d={}
+		for k,v in d.iteritems():
+			if v>1:
+				filtared_d[k]=v
+			return filtared_d
+
+	def get_all_ngram(self):
+		"""
+		Méthode qui créer un dictionnaire avec tout les 
+		ngram de mots possibles
+		"""
+		d={}
+		n=1
+		b=True
+		while b:
+			dng=self.get_n_mot(n)
+			f_dng=self.filter_dict(dng)
+			b=not(f_dng=={})
+			n+=1
+			d.update(dng)
+		return d
+		
+	def get_all_ngram2(self):
+		"""
+		Méthode qui créer un dictionnaire avec tout les 
+		ngram de caractère possibles
+		"""
+		d={}
+		n=1
+		b=True
+		while b:
+			dng=self.get_n_carac(n)
+			f_dng=self.filter_dict(dng)
+			b=not(f_dng=={})
+			n+=1
+			d.update(dng)
+		return d
+		
+	def color_string(self,substring,color) :
+		"""
+		Permet de colorier le texte html a partir de 
+		ngram de mots ou lettre
+		"""
+		c=""
+		for m in substring:
+			c+=" "+m
+		print 'color string : %s'%(c.encode('utf-8'))
+		pattern1 = re.compile(u'%s'%(c), re.I | re.M)
+		replace = '<span style="color:%s; background-color:grey;">%s</span>'%(color, c)
+		output = pattern1.sub(replace, self.s)
+		self.s=output
+	  
+	def create_html(self):
+		"""
+		Méthode qui permet de recréer le code minimal html
+		"""
+		d= '''
+		  <html>
+			<head>
+			  <meta http-equiv="Content-Type"; content="text/html"; charset="utf-8">
+			  <title></title>
+			</head>
+			<body>
+		  '''
+		f= '''
+			</body>
+		  </html>
+		'''
+		self.s=d+self.s+f
+
+def tag_cloud(tags):
+    """
+    Genere un nuage de mots.
+    """
+    tags.sort(lambda x,y: cmp(x[0], y[0]))
+    return ' '.join([('<font size="%d"><a href="/q/?querystring=%s">%s</a></font>' % \
+                    (min(1+p*7/max([tag[1] for tag in tags]), 7), x, x)) for (x, p) in tags])
+
+
+def main(path):
+	"""
+	Fonction main qui éxécute tout le traitement a partir du
+	dossier des fichiers.
+	"""
+	expr=path
+	lgraph=[]
+	lnuage=[]
+	lgraphcarac=[]
+	for path in glob.glob(expr):
+		
+		fichier=Fichier(path)#Créer la classe fichier
+		fichier.read_file()
+		fichier.source2encoding()#Cherche l'encoding du fichier
+		fichier.source2unicode()#Transforme le fichier en unicode
+		fichier.clean_unicode_html()#Supprime les balises
+		
+		#Traitement pour récupérer les ngrams
+		
+		fichier.cutBlock()
+		w=fichier.get_n_mot(1)#liste des mots
+		lw=fichier.get_all_ngram()#liste des ngrams de mots
+		c=fichier.get_n_carac(1)#liste des caractères
+		lc=fichier.get_all_ngram2()#listes des ngrams de mots
+		l1=w.items()
+		l2=lw.items()
+		l1.sort(reverse=True,cmp=comp)
+		l2.sort(reverse=True,cmp=comp)
+		l3=c.items()
+		l3.sort(reverse=True,cmp=comp)
+		l4=lc.items()
+		l4.sort(reverse=True,cmp=comp)
+		
+		#fichier.write_file('test.html')
+		
+		#Permet de créer les statitisque
+		e=fichier.effectif(l1)
+		
+		lgraph+=[l1]
+		lnuage+=[l3]
+		lgraphcarac+=[l4]
+	fichier.graph(lgraph,path)
+	fichier.nuagedepoint(lnuage,path)
+	fichier.graph(lgraphcarac,'grah_carac.png')
+		
+if __name__=="__main__":
+	for i in ['de','el','en','fi','fr','ru','zh']:
+		main("Corpus/"+i+"/*.htm")
+
+	

@@ -1,0 +1,549 @@
+from TP_1_2 import *
+from Tool_TP_1_2 import *
+from PIL import *
+
+import Tkinter
+
+racine=Tkinter.Tk()
+
+texte=Tkinter.Text(racine)
+texte.pack()
+
+def ecran(var): # fonction servant a l'affichage des textes:
+  texte.insert(Tkinter.END,var)
+
+
+sysdemenu = Tkinter.Menu(racine)
+
+Menu = Tkinter.Menu(sysdemenu)
+sysdemenu.add_cascade(label="Menu 1", menu=Menu)
+
+
+Menu.add_command(label="Quitter", command=racine.quit)
+
+menu2 = Tkinter.Menu(sysdemenu)
+sysdemenu.add_cascade(label="Question", menu=menu2)
+
+
+fr = Tkinter.Menu(menu2)
+menu2.add_cascade(label="Question 1", menu=fr)
+
+
+
+# addition des sous-items du premier item du second menu et leur commande associee
+fr.add_command(label="Zipf", command= Question1() )
+fr.add_command(label="Action 2", command=lambda: ecran('Item 1 / Action 2\n'))
+
+en = Tkinter.Menu(menu2) # addition du second item pour le second menu et leur sous-items associes
+menu2.add_cascade(label="Anglais", menu=en)
+
+# addition des sous-items du second item du second menu et leur commande associee
+en.add_command(label="Action 1", command=lambda: ecran('Item 2 / Action 1\n'))
+en.add_command(label="Action 2", command=lambda: ecran('Item 2 / Action 2\n'))
+en.add_command(label="Action 3", command=lambda: ecran('Item 2 / Action 3\n'))
+racine.config(menu=sysdemenu)
+
+
+racine.mainloop()
+
+
+
+from TP_1_2 import *
+from Tool_TP_1_2 import *
+
+import Tkinter
+
+racine=Tkinter.Tk()
+
+def quitter():
+	racine.quit()
+
+BoutonQuit=Tkinter.Button(racine,text="Quitter", command=quitter())
+BoutonQuit.pack(side=Tkinter.BOTTOM)
+
+BoutonQ1=Tkinter.Button(racine,text="Question1: Creation des graphiques Zipf", command=Question1())
+BoutonQ1.pack()
+
+BoutonQ2=Tkinter.Button(racine,text="Question2: Graphiques Zipf: rang en fonction des effectifs ", command=Question2())
+BoutonQ2.pack()
+
+racine.mainloop()
+from TP_1_2 import *
+
+Question1()
+
+
+from Tool_TP_1_2 import *
+
+# __________Preparation_________
+
+def prepare_file(html_file) :
+	src_html = read_file(html_file)
+	encoding_detected = source2encoding(src_html)
+	src_html_unicode = unicode(src_html,encoding_detected)
+	src_html_unicode = clean_unicode_html(src_html_unicode)
+	src_html_unicode = decode_html_entities(src_html_unicode)
+	return src_html_unicode
+
+# _______Question 1____________
+
+def Zipf_word(html_file):
+	s=nomfichier(html_file)
+	s="reponse/zipf/"+"zipf"+s
+	d=nomdossier(html_file)
+	y=prepare_file(html_file)
+	y=get_list_words(y)
+	y=list_words2dict_effectif(y)
+	y=dict_effectif2distrib_zipf(y)
+	pyplot(y,s)
+
+
+# ___________Pour la chine faire le Zipf depuis les caracteres________
+
+def Zipfchine(html_file):
+	s=nomfichier(html_file)
+	s="reponse/zipf/"+"zipf"+s
+	y=prepare_file(html_file)
+	y=dict_effectif_caractere(y)
+	y=dict_effectif2distrib_zipf(y)
+	pyplot(y,s)
+	
+	
+def Question1():
+	try:
+		os.mkdir("reponse/zipf/")
+	except:
+		None
+	x=['al','en','fi','fr','gr','ru']
+	for i in x:
+		s="Corpus/"+str(i)+"/*.htm"
+		t=glob.glob(s)
+		for y in t:
+			Zipf_word(y)
+	z=glob.glob("Corpus/ch/*.htm")
+	for fich in z:
+		Zipfchine(fich)
+
+
+# __________Question 2_______________
+
+def zipftaille(html_file):
+	z=prepare_file(html_file)
+	z=get_list_words(z)
+	z=list_words2dict_effectif(z)
+	z=dic_freq_taille(z)
+	fnom=nomfichier(html_file)
+	y = []
+	x = []
+	for graphie,effectif in z.iteritems() :
+		y.append(effectif)
+		x.append(graphie)
+	plt.plot(x,y)
+	plt.scatter(x, y)
+	plt.xlabel('rang')
+	plt.ylabel('effectif')
+	plt.savefig("reponse/NP_question2/"+"NP"+fnom+'.png')
+	plt.close()
+
+def Question2():
+	try:
+		os.mkdir("reponse/NP_question2/")
+	except:
+		None
+	x=['al','en','fi','fr','gr','ru']
+	for i in x:
+		s="Corpus/"+str(i)+"/*.htm"
+		t=glob.glob(s)
+		for y in t:
+			zipftaille(y)
+	z=glob.glob("Corpus/ch/*.htm")
+	for fich in z:
+		zipftaille(fich)
+
+
+#____________Question 3_______________
+
+def zipfcarac(html_file):
+	s=nomfichier(html_file)
+	s="reponse/question3/"+"zipfcarac"+s
+	y=prepare_file(html_file)
+	y=dict_effectif_caractere(y)
+	y=dict_effectif2distrib_zipf(y)
+	pyplot(y,s)
+
+def Question3():
+	try:
+		os.mkdir("reponse/question3/")
+	except:
+		None
+	x=['al','en','fi','fr','gr','ru']
+	for i in x:
+		s="Corpus/"+str(i)+"/*.htm"
+		t=glob.glob(s)
+		for y in t:
+			zipfcarac(y)
+	z=glob.glob("Corpus/ch/*.htm")
+	for fich in z:
+		zipfcarac(fich)
+
+# _______________Question 4 ______________
+
+def occumot(html_file):
+	prepared_file=prepare_file(html_file)
+	x=get_list_words(prepared_file)
+	x=len(x)
+	y=get_list_words(prepared_file)
+	y=list_words2dict_effectif(y)
+	y=len(y)
+	z=float(x)/float(y)
+	res="il y a %s mots, %s mots differents, et le rapport est %s." %(x,y,z)
+	fnom=nomfichier(html_file)
+	fnom="reponse/question4/"+fnom+".txt"
+	return write_file(fnom,res)
+
+def occu_carac(html_file):
+	prepared_file=prepare_file(html_file)
+	x=len(prepared_file)
+	y=dict_effectif_caractere(prepared_file)
+	y=len(y)
+	z=float(x)/float(y)
+	res="il y a %s mots, %s mots differents, et le rapport est %s." %(x,y,z)
+	fnom=nomfichier(html_file)
+	fnom="reponse/question4/"+fnom+".txt"
+	return write_file(fnom,res)
+
+
+def Question4():
+	try:
+		os.mkdir("reponse/question4/")
+	except:
+		None
+	x=['al','en','fi','fr','gr','ru']
+	for i in x:
+		s="Corpus/"+str(i)+"/*.htm"
+		t=glob.glob(s)
+		for y in t:
+			occumot(y)
+	z=glob.glob("Corpus/ch/*.htm")
+	for fich in z:
+		occu_carac(fich)
+
+# _____________Question 5___________
+
+def get_n_gram(l,n):
+	d={}
+	for su in l:
+		lw=get_list_words(su)
+		len_w=len(lw)
+		for i in xrange(len_w-n):
+			ngram=lw[i:i+n]
+			ngram=tuple(ln-gram)
+			if ngram not in d:
+				d[ngram]=0
+			d[ngram]+=1
+	return d
+	
+def get_all_gram(l):
+	d={}
+	n=1
+	b=True
+	while b:
+		dng=get_n_gram(l,n)
+		b=check(dng)
+		n+=1
+		d.update(dng)
+	return d
+
+def check(dng):
+	b=False
+	for _,eff in dng.iteritems():
+		if eff>2:
+			return True
+	return b
+
+
+# ____________Sortie Html___________
+
+def SortieHtml(html_file):
+	d=prepare_file(html_file)
+	d=get_list_words(d)
+	d=list_words2dict_effectif(d)
+	mot=dict2ul(d)
+
+	Zipf_word(html_file)
+	
+	fnom=nomfichier(html_file)
+	img=u'<img src=\''+"/reponse/zipf/"+fnom+'.png\''+"/>"
+	titre=extract_title(html_file)
+	header=get_header_html()	
+	footer=get_footer_html()
+	html_unicode=header+titre+u'<div style=\'float=left\'>'+img+u'</div>'+mot+footer
+	html=html_unicode.encode('utf8')
+	
+	r="reponse/questionHtml/html"+fnom+".html"
+	return write_file(r,s)
+
+def SortieHtmlchinois(html_file):
+	d=prepare_file(html_file)
+	d=dict_effectif_caractere(y)
+	mot=dict2ul(d)
+
+	Zipfchine(html_file)
+	
+	fnom=nomfichier(html_file)
+	img=u'<img src=\''+"/reponse/zipf/"+fnom+'.png\''+"/>"
+	titre=extract_title(source2encoding(html_file))
+	header=get_header_html()	
+	footer=get_footer_html()
+	html_unicode=header+titre+u'<div style=\'float=left\'>'+img+u'</div>'+mot+footer
+	html=html_unicode.encode('utf8')
+	
+	r="reponse/questionHtml/html"+fnom+".html"
+	return write_file(r,s)
+
+
+def QuestionHtml():
+	try:
+		os.mkdir("reponse/questionHtml/")
+	except:
+		None
+	x=['al','en','fi','fr','gr','ru']
+	for i in x:
+		s="Corpus/"+str(i)+"/*.htm"
+		t=glob.glob(s)
+		for y in t:
+			SortieHtml(y)
+	z=glob.glob("Corpus/ch/*.htm")
+	for fich in z:
+		SortieHtmlchinois(fich)
+
+# -*- coding: utf-8 -*-
+
+import re
+import os
+import sys
+import string
+import htmlentitydefs
+import matplotlib.pyplot as plt
+import glob
+
+from Tkinter import *
+
+from TP_1_2 import *
+
+# _________________Demarrage________________
+
+# ____ Lire le fichier ____
+
+def read_file(html_file) :
+	f = open(html_file, 'r')
+	s = f.read()
+	f.close()
+	return s
+
+# ____ Ecrire un fichier ____
+
+def write_file(new_file, s) :
+	f = open(new_file, 'w')
+	f.write(s)
+	f.close()
+
+# ____ Detecter la source et encoder le fichier ____
+
+def source2encoding(s) :
+	default_encoding = 'iso-8859-1'
+	pattern_detect_encoding = '<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.+?)["\']'
+	pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+	match_charset = re.search(pattern_compiled, s)
+	if match_charset :
+		encoding = string.lower(match_charset.group(1))
+		print 'detected charset ::', encoding.encode('utf-8')
+	else :
+		encoding = default_encoding
+		print 'undetected charset, use default encoding ::', default_encoding
+	return encoding
+
+# ____ Clean la chaine encoder, enleve les balises html, etc... ____
+
+def clean_unicode_html(s_unicode) :
+	clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+	clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+	pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+	clean_html = pattern1.sub(u'', clean_html)
+
+	pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+	clean_html = pattern2.sub(u'', clean_html)
+
+	pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+	clean_html = pattern3.sub(u'', clean_html)
+
+	pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+	clean_html = pattern4.sub(u'', clean_html)
+
+	clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+	
+	pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+	clean_html = pattern5.sub(u' # ', clean_html)
+
+	pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+	clean_html = pattern6.sub(u' # ', clean_html)
+	
+	pattern7 = re.compile(u'[&]?&eacute;', re.I | re.M)
+	clean_html = pattern7.sub(u'é', clean_html)  
+  
+	return clean_html
+
+def replace_num_entities(matchobj_unicode) :
+	if int(matchobj_unicode.group(1)) in range(65535):
+		return unichr(int(matchobj_unicode.group(1)))
+	else:
+		return '&#%s;'%(matchobj_unicode.group(1))
+
+def replace_alpha_entities(matchobj_unicode) :
+	k = matchobj_unicode.group(1)
+	if not htmlentitydefs.entitydefs.has_key(k) :
+		if k.isupper() :
+			k = string.lower(matchobj_unicode.group(1))
+			if not htmlentitydefs.entitydefs.has_key(cle) :
+				return ''
+		else :
+			return ''
+	if len(htmlentitydefs.entitydefs[k]) == 1 :
+		car = htmlentitydefs.entitydefs[k]
+		return unicode(car, 'iso-8859-1')
+	else :
+		str_code = htmlentitydefs.entitydefs[k].strip('&#;')
+		return unichr(int(str_code))
+
+def decode_html_entities(s_unicode) :
+	html = re.sub('&#([0-9]+);', replace_num_entities, s_unicode)
+	pattern = re.compile('&([a-z]+);', re.I)
+	html = pattern.sub(replace_alpha_entities, html)
+	return html
+
+#_______ Retourne une liste de mots ________
+
+def get_list_words(html_unicode):
+	pattern_word=u'[\w]+'
+	pattern_word_compiled=re.compile(pattern_word, re.U)
+	list_words=re.findall(pattern_word_compiled, html_unicode)
+	number=u'[0-9]'
+	number_compiled=re.compile(number, re.U)
+	return list_words
+
+# ______Dictionnaire d'effectif_______
+
+def dict_count(d, k) :
+	if(d.has_key(k)) :
+		d[k] += 1
+	else :
+		d[k] = 1
+
+def dict_count_taille(d,k,h) :
+	if(d.has_key(len(k))) :
+		d[len(k)] += h[k]
+	else:
+		d[len(k)]=h[k]
+
+def list_words2dict_effectif(list_words_unicode) :
+	dict_effectif = {}
+	for i in list_words_unicode :
+		dict_count(dict_effectif, i)
+	return dict_effectif
+
+def dict_effectif_caractere(prepared_file) :
+	dict_effectif_carac = {}
+	for i in prepared_file :
+		dict_count(dict_effectif_carac, i)
+	return dict_effectif_carac
+
+def dic_freq_taille(list_words_unicode):
+	dic_taille={}
+	for i in list_words_unicode:
+		dict_count_taille(dic_taille, i, list_words_unicode)
+	return dic_taille
+
+def dict_effectif2distrib_zipf(dict_effectif) :
+	l = []
+	for graphie,effectif in dict_effectif.iteritems() :
+		l.append(effectif)
+	l = sorted(l, reverse=True)
+	return l
+
+# ___________ZIPF_____________
+
+def pyplot(l,fnom):
+	plt.plot(l)
+	plt.loglog()
+	plt.ylabel('effectif')
+	plt.xlabel('rang')
+	t=fnom+'.png'
+	plt.savefig(t)
+	plt.close()
+	
+def nomfichier(adresse):
+	nom="%s"%(adresse)
+	nom=re.sub("[A-Za-z0-9]*[/]+",'',nom)
+	nom=re.sub('.htm+l?','',nom)
+	nom="%s"%(nom)
+	return nom
+
+def nomdossier(adresse):
+	nom="%s"%(adresse)
+	nom=re.sub("[a-zA-Z0-9]?[.htm+l?]",'',nom)
+	nom="%s"%(nom)
+	return nom
+
+# __________ Outil html __________
+
+def ltuple2ul(l) :
+	s = ''
+	for t in l :
+		i = ''
+		for e in t :
+			i += '%s '%(e)
+		s += '<li>%s</li>'%(i)
+	return '<ul>%s</ul>'%s
+
+def list2ul(l) :
+	s = ''
+	for e in l :
+		s += '<li>%s</li>'%(e)
+	return '<ul>%s</ul>'%s
+
+def dict2ul(d) :
+	s = ''
+	for k,e in d.iteritems() :
+		s += '<li>%s :: %s</li>'%(str(k),str(e))
+	return '<ul>%s</ul>'%s
+
+
+def get_header_html() :
+  s = '''
+  <html>
+    <head>
+      <meta http-equiv="Content-Type"
+            content="text/html; charset=utf-8">
+      <title>Titre</title>
+    </head>
+    <body>
+  '''
+  return s
+
+def get_footer_html() :
+  s = '''
+    </body>
+  </html>
+  '''
+  return s
+
+def extract_title(html_unicode) :
+  pattcomp = re.compile(u'<title>(.+)<\/title>', re.I)
+  trouv_titre = re.search(pattcomp, html_unicode)
+  if trouv_titre:
+    return trouv_titre.group(1)
+  return ''
+  
+ 
+

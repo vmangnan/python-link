@@ -1,0 +1,317 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+import re
+import os
+import sys
+import string
+import glob
+from math import log
+
+def lirefichier(fichier) :
+    fic=open(fichier, "r")
+    texte=fic.read()
+    fic.close()
+    return texte
+
+def detecteencoding(texte) :
+    patternencoding=u'charset[\s]*=[\s]*["]*([A-Za-z0-9\-]+)'
+    pattern_compiled = re.compile(patternencoding, re.I)
+    match_charset = re.search(pattern_compiled, texte)
+    encoding = string.lower(match_charset.group(1))
+    return encoding
+
+def convertir_unicode(texte, encoding) :
+    return unicode(texte, encoding)
+
+def nettoyer_html(texteunicode) :
+    clean_html = re.sub(u'&nbsp;', ' ', texteunicode)
+    clean_html = re.sub(u'[\s]+', u' ', clean_html)
+    clean_html = re.sub(u'&eacute;', u'é', clean_html)
+    clean_html = re.sub(u'&egrave;', u'è', clean_html)
+    clean_html = re.sub(u'&agrave;', u'à', clean_html)
+    clean_html = re.sub(u'&ecirc;', u'ê', clean_html)
+    clean_html = re.sub(u'&ccedil;', u'ç', clean_html)
+    clean_html = re.sub(u'&ocirc;', u'é', clean_html)
+    clean_html = re.sub(u'&Eacute;', u'É', clean_html)
+    
+
+    pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+    clean_html = pattern1.sub(u'', clean_html)
+
+    pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+    clean_html = pattern2.sub(u'', clean_html)
+
+    pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+    clean_html = pattern3.sub(u'', clean_html)
+
+    pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+    clean_html = pattern4.sub(u'', clean_html)
+
+    clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+    pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+    clean_html = pattern5.sub(u' # ', clean_html)
+
+    pattern41 = re.compile(u'".+?>', re.I | re.M)
+    clean_html = pattern41.sub(u'', clean_html)
+
+    pattern42 = re.compile(u'&(copy|mdash|laquo|raquo|quot);', re.I | re.M)
+    clean_html = pattern42.sub(u'', clean_html)
+
+    pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+    clean_html = pattern6.sub(u' # ', clean_html)
+
+    return clean_html
+
+def coupe_paragraph(txtunicode) :
+    pattern = u'([^#|]+)'
+    pattern_compiled = re.compile(pattern, re.U)
+    list_paragraph = pattern_compiled.findall(txtunicode)
+    return list_paragraph
+
+def coupe_mot(txtunicode) :
+    pattern1=u'(\w{3,}[\'-])?'
+    pattern2=u'(\w)+'
+    pattern_word = u'(%s%s)' %(pattern1, pattern2)
+    pattern_word_compiled = re.compile(pattern_word, re.U)
+    list_words = pattern_word_compiled.findall(txtunicode)
+    return [words[0] for words in list_words]
+
+def coupe_car(txtunicode) :
+    pattern_car = u'(\w)'
+    pattern_car_compiled = re.compile(pattern_car, re.U)
+    list_cars = pattern_car_compiled.findall(txtunicode)
+    return list_cars
+
+def nombre_mot(l) :
+    res=0
+    for su in l :
+        lw=coupe_mot(su)
+        res=res+len(lw)
+    return res
+
+def nombre_carac(l) :
+    res=0
+    for su in l :
+        lw=coupe_car(su)
+        res=res+len(lw)
+    return res
+
+def nombre_mot_diff(l) :
+    return len(get_n_gram(l, 1))
+
+def get_n_gram(l, n) :
+    d={}
+    for su in l :
+        lw=coupe_mot(su)
+        len_w=len(lw)
+        for i in xrange(len_w-n+1) :
+            ln_gram=lw[i:i+n]
+            n_gram=tuple(ln_gram)
+            if n_gram not in d :
+                d[n_gram]=0
+            d[n_gram]+=1
+    return d
+
+def get_n_gram_carac(l, n) :
+    d={}
+    for su in l :
+        lw=coupe_mot(su)
+        for mot in lw :
+            lc=coupe_car(mot)
+            len_w=len(lc)
+            for i in xrange(len_w-n+1) :
+                ln_gram=lc[i:i+n]
+                n_gram=tuple(ln_gram)
+                if n_gram not in d :
+                    d[n_gram]=0
+                d[n_gram]+=1
+    return d
+
+def filtrer_dic(d) :
+    d_filtre={}
+    for cle in d :
+        if d[cle]>1 and len(cle)>1 :
+            d_filtre[cle]=d[cle]
+    return d_filtre
+
+def all_n_gram(l) :
+    d={}
+    n=1
+    b=True
+    while b or n==2 :
+        dng=get_n_gram(l, n)
+        n+=1
+        f_dng=filtrer_dic(dng)
+        d.update(f_dng)
+        b=not(f_dng=={})
+    return d
+
+def all_n_gram_carac(l) :
+    d={}
+    n=1
+    b=True
+    while b or n==2 :
+        dng=get_n_gram_carac(l, n)
+        n+=1
+        f_dng=filtrer_dic(dng)
+        d.update(f_dng)
+        b=not(f_dng=={})
+    return d
+
+def get_eff_long(l) :
+    d=get_n_gram(l, 1)
+    res={}
+    for cle in d :
+        len_m=len(cle[0])
+        if len_m not in res :
+            res[len_m]=0
+        res[len_m]=res[len_m]+d[cle]
+    return res
+
+def colorier_doc(txtunicode, encoding, ficsortie, d) :
+    for n_gram,_ in d.iteritems() :
+        patt=""
+        pattecri=""
+        for mot in n_gram :
+            patt+='%s[ ]+?(<[/]?span .+?>)*' %(mot)
+            pattecri+='%s ' %(mot)
+        pattern = re.compile(patt, re.I|re.U)
+        subage=u'<span style="color:red; background-color:grey;">%s</span>' %(pattecri)
+        txtunicode = pattern.sub(subage, txtunicode)
+    sortie=open(ficsortie, "w")
+    sortie.write(txtunicode.encode(encoding))
+    sortie.close()
+
+def plusgrand(liste) :
+    if liste==[] :
+        return (0, 0)
+    cour=liste[0]
+    for tupl in liste :
+        if tupl[1]>cour[1] :
+            cour=tupl
+    return cour
+
+def trier(liste) :
+    res=[]
+    maxi=plusgrand(liste)
+    for i in range(maxi[1]) :
+        res=res+[t for t in liste if t[1]==maxi[1]-i]
+    return res
+
+def addition_dict(d1, d2) :
+    for cle in d2 :
+        d1[cle]=d1.get(cle, 0)+d2[cle]
+    return d1
+
+def get_numero_fichier(path) :
+    i=0
+    long_path=len(path)
+    for i in range(long_path) :
+        cour=path[long_path-i-1]
+        if cour in ["1", "2", "3", "4", "5"] :
+            return cour
+    return "0"
+
+def transf_point_virgule(txt) :
+    res=""
+    for c in txt :
+        if c=="." :
+            res+=","
+        else :
+            res+=c
+    return res
+
+def get_chemin(path) :
+    long_path=len(path)
+    for i in range(long_path) :
+        if path[long_path-i-1] in ["\\","/"] :
+            return path[:long_path-i]
+    return path
+            
+
+try :
+    fichier=sys.argv[1]
+    txt=lirefichier(fichier)
+    encoding=detecteencoding(txt)
+    txtuni=convertir_unicode(txt, encoding)
+    txtunicode=nettoyer_html(txtuni)
+    listep=coupe_paragraph(txtunicode)
+    dngram=all_n_gram(listep)
+    colorier_doc(txtuni, encoding, get_chemin(fichier)+'colorie'+get_numero_fichier(fichier)+".html",dngram)
+    
+except :
+    for langue in ["francais", "anglais", "allemand", "finnois", "grec", "russe", "chinois"] :
+        expr="corpus/%s/%s*.htm*" %(langue, langue)
+        ficsortie="corpus/%s/info.txt" %(langue)
+        csv="corpus/%s/eff.csv" %(langue)
+        csvlong="corpus/%s/long.csv" %(langue)
+        rapport_mots=0
+        d={}
+        dl={}
+        dngram={}
+        dcarac={}
+
+        nb_mot=0
+        nb_car=0
+        for path in glob.glob(expr) :
+            txt=lirefichier(path)
+            encoding=detecteencoding(txt)
+            txtuni=convertir_unicode(txt, encoding)
+            txtunicode=nettoyer_html(txtuni)
+            listep=coupe_paragraph(txtunicode)
+            rapport_mots+=float(nombre_mot(listep))/nombre_mot_diff(listep)
+            d_doc=get_n_gram(listep, 1)
+            d=addition_dict(d, d_doc)
+            dl_doc=get_eff_long(listep)
+            dl=addition_dict(dl, dl_doc)
+            dngram_doc=all_n_gram(listep)
+            dngram=addition_dict(dngram, dngram_doc)
+            dcarac_doc=all_n_gram_carac(listep)
+            dcarac=addition_dict(dcarac, dcarac_doc)
+            nb_mot+=nombre_mot(listep)
+            nb_car+=nombre_carac(listep)
+        sortie=open(ficsortie, "w")
+
+        sortie.write("Nombre mots : "+str(nb_mot)+"\n")
+        sortie.write("Nombre caractères : "+str(nb_car)+"\n")
+        
+        sortie.write("Rapports Nombre mots/Nombre mots différents :\n"+str(rapport_mots/5.0)+"\n\n")
+        liste=[(mot,eff) for mot, eff in d.iteritems()]
+        liste=trier(liste)
+        sortie.write("Liste des mots et leur effectif :\n")
+        for tupl in liste :
+            for mot in tupl[0] :
+                sortie.write(mot.encode("utf-8")+" ")
+            sortie.write(str(tupl[1]).encode("utf-8")+"\n")
+        listelong=[(mot,eff) for mot, eff in dl.iteritems()]
+        sortie.write("\nListe des longueurs de mot et leur effectif :\n")
+        for tupl in listelong :
+            sortie.write(str(tupl[0]).encode("utf-8")+" ")
+            sortie.write(str(tupl[1]).encode("utf-8")+"\n")
+        liste_ngram=[(mot,eff) for mot, eff in dngram.iteritems()]
+        liste_ngram=trier(liste_ngram)
+        sortie.write("\nListe des suite de mots contigus et leur effectif :\n")
+        for tupl in liste_ngram :
+            for mot in tupl[0] :
+                sortie.write(mot.encode("utf-8")+" ")
+                sortie.write(str(tupl[1]).encode("utf-8")+"\n")
+        liste_carac=[(mot,eff) for mot, eff in dcarac.iteritems()]
+        liste_carac=trier(liste_carac)
+        sortie.write("\nListe des suite de caractères contigus et leur effectif :\n")
+        for tupl in liste_carac :
+            for mot in tupl[0] :
+                sortie.write(mot.encode("utf-8"))
+            sortie.write(" "+str(tupl[1]).encode("utf-8")+"\n")
+        sortie.close()
+        txtcsv=open(csv,"w")
+        for i in range(len(liste)) :
+            txtcsv.write(transf_point_virgule(str(log(i+1,10))+";"+str(log(liste[i][1],10))).encode("utf-8")+"\n")
+        txtcsv.close()
+        txtcsv=open(csvlong,"w")
+        for i in range(len(listelong)) :
+            txtcsv.write(transf_point_virgule(str(listelong[i][0])+";"+str(listelong[i][1])).encode("utf-8")+"\n")
+        txtcsv.close()
+
+print 'encoding',encoding

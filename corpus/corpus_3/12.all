@@ -1,0 +1,310 @@
+import re
+import string
+import sys
+import glob
+import os
+
+
+def source2encoding(s) :
+  default_encoding = 'utf-8'
+  pattern_detect_encoding = 'charset="?(.*?)"'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+  if match_charset :
+    encoding = string.lower(match_charset.group(1))
+    #print 'detected charset ::', encoding.encode('encoding')
+  else :
+    encoding = default_encoding
+    #print 'undetected charset, use default encoding ::', default_encoding
+  return encoding
+
+def clean_unicode_html(s_unicode) :
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  pattern5 = re.compile(u'<((address)|(blockote)|(body)|(dd)|(div)|(dl)|(dt)|(fieldset)|(form)|(h[1-6])|(head)|(html)|(li)|(map)|(noscript)|(ol)|(p)|(pre)|(table)|(tbody)|(td)|(tfoot)|(th)|(thead)|(tr)|(ul))>', re.I | re.M)
+  clean_html = pattern5.sub(u' # ', clean_html)
+  
+  pattern6 = re.compile(u'</((address)|(blockote)|(body)|(dd)|(div)|(dl)|(dt)|(fieldset)|(form)|(h[1-6])|(head)|(html)|(li)|(map)|(noscript)|(ol)|(p)|(pre)|(table)|(tbody)|(td)|(tfoot)|(th)|(thead)|(tr)|(ul))>', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' ', clean_html)
+
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+  
+  return clean_html
+ 
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+def write_file(path_file, s) :
+  f = open(path_file, 'a')
+  f.write(s)
+  f.close()
+
+def cutWords(chaine):
+        lw=[]
+        pattern_mot='[a-zA-Z]+'
+        pattern_mot_compiled=re.compile(pattern_mot, re.I | re.U)
+        lw=re.findall(pattern_mot_compiled, chaine)
+        return lw
+        
+def cutTrigrammes(chaine):
+        lw=[]
+        for i in xrange(0,len(chaine)-2):
+                lw+=[chaine[i:i+3]]
+        return lw
+
+def cutSuffixes(chaine):
+        ls=[]
+        lw=cutWords(chaine)
+        for i in lw:
+                if len(i)<=3:
+                        ls+=[i]
+                else:
+                        i=i[len(i)-3:len(i)]                    
+                        ls+=[i]
+        return ls
+
+def cutTwoWords(chaine):
+        lw=[]
+        pattern_mot='[a-zA-Z]+ [a-zA-Z]+'
+        pattern_mot_compiled=re.compile(pattern_mot, re.I | re.U)
+        lw=re.findall(pattern_mot_compiled, chaine)
+        return lw
+
+def compter(liste):
+        d={}
+        for i in liste:
+                if i not in d:
+                        d[i]=0
+                d[i]+=1
+        return d
+        
+def compute(ch,seg):
+        l=seg(ch)
+        d=compter(l)
+        return d
+
+def filtre(d):
+    eff=(max(d.values())/100)
+    d_res={}
+    while 1:
+        cle=max(d,key = lambda a: d.get(a))
+        if d[cle]>=eff:
+            d_res[cle]=d[cle]
+            del(d[cle])
+        else:
+            break
+    return d_res
+
+def ecritureBase(d,path):
+        for i in d:
+                d[i]=filtre(d[i])
+                for j in d[i]:
+                        j=j.encode('utf-8','strict')
+                        write_file(path+i,j+"\n")
+                                
+def detectLang(name):
+        pattern=("\.(.*?).xml")
+        pattern_compiled = re.compile(pattern, re.I)
+        return re.search(pattern_compiled, name).group(1)
+        
+def fusionnerDicos(d,dd):
+        for i in dd:
+                if i not in d:
+                        d[i]=0
+                d[i]+=dd[i]
+
+def reInitDossiers():
+        try:
+                for sep in ['Words','Suffixes','Trigrammes','TwoWords']:
+                        for filename in os.listdir(sep) :
+                                os.remove(sep + "/" + filename)
+        except OSError:
+                pass
+        try:
+                for sep in ['Words','Suffixes','Trigrammes','TwoWords']:
+                        os.mkdir(sep)     
+        except OSError:
+                pass
+        
+def lecture(langue,separateur):
+        fichier = open(separateur+'/'+langue,"r")
+        lignes = fichier.readlines()
+        for i in range(len(lignes)):
+                lignes[i]=lignes[i][0:-1]
+                lignes[i]=unicode(lignes[i],source2encoding(lignes[i]))
+        return lignes
+
+def compare(source,listeSample):
+        score=0
+        for mot in listeSample :
+                if mot in source:
+                        score+=1
+        return score
+
+def compareTous(listeLanguage,separateur,sample):
+        d={}
+        for langue in listeLanguage:
+                source=lecture(langue,str(separateur)[13:-23])
+                score=compare(source,separateur(sample))
+                d[score]=langue
+        return d
+
+
+def sample(path):
+        source=read_file(path)
+        source=unicode(source,source2encoding(source))
+        source=clean_unicode_html(source)
+        return source
+                
+def dicoToListe(d):
+        l=[]
+        for i in d:
+                li=[i,d[i]]
+                l.append(li)
+        l.sort(reverse=True)
+        return l
+        
+def compareScore(d):
+        res=[]
+        l=dicoToListe(d)
+        i=0
+        while l[i][0]<l[i+1][0]*1.15: #1.5 a preciser...
+                i+=1
+                if i+1==len(l):
+                        break
+        for j in range(i+1):
+                res.append(l[j][1])
+        return res
+
+def diagFile(path,listeLanguage,listeSeparateur):
+        listeLangueParSeparateur=[]
+        for sep in listeSeparateur:
+                listeLangueParSeparateur.append(compareScore(compareTous(listeLanguage,sep,sample(path))))
+        return listeLangueParSeparateur
+
+def divise(a,b):
+        if b==0:
+                return 0
+        else:
+                return a/b
+        
+def diagnostic(listeSeparateur=[cutWords,cutTrigrammes,cutSuffixes,cutTwoWords]):
+        listeLanguage=['de','en','es','fr','lt','nl']
+        d={}
+        for path in glob.glob("Sample/*"):
+                d[path[7:]]=[diagFile(path,listeLanguage,listeSeparateur),detectLang(path)]
+        carac={}
+        for sep in range(len(listeSeparateur)):
+                liste=[]
+                liste3=[]
+                for lgue in listeLanguage:
+                        listeParLangue=[0,0,0,0]
+                        for i in d:
+                                if len(d[i][0][sep])>=2:
+                                        listeParLangue[3]+=1.
+                                else:
+                                        if d[i][1]==lgue:
+                                                if d[i][0][sep][0]==lgue:
+                                                       listeParLangue[1]+=1.
+                                                listeParLangue[2]+=1.
+                                        else:
+                                                if d[i][0][sep][0]==lgue:
+                                                        listeParLangue[0]+=1.
+                        liste.append([divise(listeParLangue[1],listeParLangue[2]),divise(listeParLangue[1],(listeParLangue[1]+listeParLangue[0])),listeParLangue[3],lgue])
+                        liste3.append(lgue,listeParLangue[0],listeParLangue[1],listeParLangue[2],listeParLangue[3])
+                        print liste3
+                liste2=[0.,0.,0]
+                for j in liste:
+                        liste2[0]+=j[0]
+                        liste2[1]+=j[1]
+                        liste2[2]+=j[2]
+                precision=liste2[0]/len(liste)
+                rappel=liste2[1]/len(liste)
+                carac[str(listeSeparateur[sep])[13:-23]]=[precision,rappel,divise((2*rappel*precision),(rappel+precision)),liste2[2]/len(listeLanguage)]
+        caracToCsv(carac)
+
+def caracToCsv(carac):
+        s='donnees;precision;rapport;f-mesure;fichiers imprecision'
+        for sep in carac:
+                s+='\n'+str(sep)+';'
+                for value in carac[sep]:
+                        s+=str(value)+';'
+        s=re.sub('\.',',',s)
+        os.remove('csv.csv')
+        write_file('csv.csv',s)
+
+        
+def tp3Ressources():
+        dwAll={}
+        dtwAll={}
+        dtAll={}
+        dsAll={}
+        compteur=float(0)
+        for path in glob.glob("Sources/*"):
+                compteur+=1
+                lang=detectLang(path)
+                source=read_file(path)
+                source=unicode(source,source2encoding(source))
+                source=clean_unicode_html(source)
+                d=compute(source,cutWords)
+                if lang not in dwAll:
+                        dwAll[lang]={}
+                fusionnerDicos(dwAll[lang],d)
+                
+                d=compute(source,cutTrigrammes)
+                if lang not in dtAll:
+                        dtAll[lang]={}
+                fusionnerDicos(dtAll[lang],d)
+                
+                d=compute(source,cutSuffixes)
+                if lang not in dsAll:
+                        dsAll[lang]={}
+                fusionnerDicos(dsAll[lang],d)
+                
+                d=compute(source,cutTwoWords)
+                if lang not in dtwAll:
+                        dtwAll[lang]={}
+                fusionnerDicos(dtwAll[lang],d)
+        reInitDossiers()
+        ecritureBase(dwAll,"Words/")
+        ecritureBase(dtAll,"Trigrammes/")
+        ecritureBase(dsAll,"Suffixes/")
+        ecritureBase(dtwAll,"TwoWords/")
+
+def tp3(separateur):
+        if separateur:
+                diagnostic([separateur])
+        else:
+                diagnostic()
+
+if len(sys.argv)>=2:
+        param=sys.argv[1]
+else:
+        param=''
+if param=='ressources':
+        print 'ressources'
+        param=''
+        tp3Ressources()
+tp3(param)

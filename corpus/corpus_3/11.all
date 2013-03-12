@@ -1,0 +1,317 @@
+#!/usr/local/bin/pythonw
+#-*- coding:utf-8 -*-
+
+import re
+import json
+import sys
+import os
+
+#==============================================
+#==========FONCTIONS LECTURE/ECRITURE==========
+#==============================================
+
+def read(path_file):
+    """Cette fonction lit un fichier quelconque"""
+    f=open(path_file,'r')
+    s=f.read()
+    f.close()
+    return s
+
+def readRes(path_file):
+    """Cette fonction lit un fichier avec l'extension .json"""
+    f=open(path_file,'r')
+    s=f.read()
+    dico=json.loads(s,object_hook=dict)
+    f.close()
+    return dico #renvoie les clés en unicode
+
+def writeRes(path_file, dico):
+    """Cette fonction ecrit un fichier avec l'extension .json"""
+    f=open(path_file,'w')
+    f.write(json.dumps(dico,indent=4))
+    f.close()
+
+#================================================
+#==========FONCTIONS SUR LE CODE SOURCE==========
+#================================================
+
+def convertUni(srcHtml):
+    return unicode(srcHtml,'utf-8')
+
+def getLstStr(srcHtmlUni):
+    """Cette fonction prend les chaines de caractere d'un code source en unicode"""
+    lstStr=[]
+    tmp=''
+    car=0
+    while car<len(srcHtmlUni):
+        if srcHtmlUni[car]==u'#':
+            if tmp!='':
+                lstStr+=[tmp]
+                tmp=''
+        if srcHtmlUni[car]!=u'#' and srcHtmlUni[car]!=u'\n':
+                tmp+=srcHtmlUni[car]
+        car+=1
+    return lstStr
+
+def debaliser(srcHtmlUni):
+    """Cette fonction enleve toutes les balises du code source et les remplace par des #"""
+    reBalise=u"(?i)<\/?\w+((\s+\w+(\s*=\s*(?:\".*?\"|'.*?'|[^'\">\s]+))?)+\s*|\s*)\/?>[\s]+"
+    pattern=re.compile(reBalise)
+    srcHtmlClean=pattern.sub(u'#',srcHtmlUni)
+    return srcHtmlClean
+
+def creeChemin(path_file):
+    """Cette fonction cree une liste avec tous les fichier ou dossier du chemin donnee en argument"""
+    l=[]
+    lstDossier=os.listdir(path_file)
+    for x in lstDossier:
+	    newpath=os.path.join(path_file,x)
+	    l.append(newpath)
+    return l
+
+def prepareFile(path_file):
+    """Cette fonction prepare le fichier source en le codant en unicode et en le debalisant"""
+    src=read(path_file)
+    srcUni=convertUni(src)
+    srcClean=debaliser(srcUni)
+    return srcClean
+    
+
+#==========================================================
+#==========FONCTIONS SUR LES CHAINES DE CARACTERE==========
+#==========================================================
+
+
+def getLstWords(string):
+    return string.split()
+
+def getWords(string):
+    """Cette fonction prend une chaine de caracteres, le coupe en mots puis compte les effectifs
+de chacun tout en stockant dans un dictionnaire"""
+    dico={}
+    lstWords=getLstWords(string)
+    for word in lstWords:
+        if word not in dico:
+            dico[word]=0
+        dico[word]+=1
+    return dico
+
+def getTriGram(string):
+    """Cette fonction prend une chaine de caracteres, le coupe en trigrammes puis compte les effectifs
+de chacun tout en stockant dans un dictionnaire"""
+    dico={}
+    for i in range(len(string)-2):
+        subStr=string[i:i+3]
+        if subStr not in dico:
+            dico[subStr]=0
+        dico[subStr]+=1
+    return dico
+
+def getSuffix(string):
+    """Cette fonction prend une chaine de caracteres, le coupe en mots puis prend le suffixe de chacun,
+compte les effectifs, et stocke dans un dictionnaire"""
+    dico={}
+    lstWords=getLstWords(string)
+    for word in lstWords:
+        suffix=word[-3:]
+        if suffix not in dico:
+            dico[suffix]=0
+        dico[suffix]+=1
+    return dico
+
+def getBestRes(dico):
+    """Cette fonction prend un dictionnaire
+et renvoie les cles dont la valeur est superieure à 7(valeur arbitraire)"""
+    d={}
+    for cle,val in dico.iteritems():
+        if val>7:
+            d[cle]=val
+    return d
+
+
+    
+#!/usr/local/bin/pythonw
+#-*- coding:utf-8 -*-
+
+##When I wrote this, only God and I understood that I was doing.
+##Now, God only knows.
+
+import fonctions as f
+import sys
+import os
+
+#=============================================
+#==========FONCTIONS COMPLEMENTAIRES==========
+#=============================================
+
+def check(dico1,dico2):
+    d=dico1.copy()
+    for cle,val in dico2.iteritems():
+        if d.has_key(cle):
+            d[cle]+=val
+        else:
+            d[cle]=val
+    return d
+
+##def maxi(dico):
+##    d={}
+##    maxi=1
+##    for cle,val in dico.iteritems():
+##        if val>=maxi:
+##            maxi=val
+##            d[cle]=val
+##    if d=={}:
+##        d["aucune"]=0
+##    return d
+
+def diagnostic(dico):
+    l=[]
+    for cle,val in dico.iteritems():
+        l+=[(cle,val)]
+    lst=sorted(l,key=lambda lang: lang[1], reverse=True)
+    if lst[0][1]>=2*lst[1][1]:
+        return lst[0]
+    return ()
+
+def afficheRes(tupl):
+    if tupl!=():
+        return "La langue diagnostiqué pour ce document est: "+str(tupl[0])+", avec un score de: "+str(tupl[1])
+    return "Aucune langue n'a pu être diagnostiqué pour ce document"
+        
+
+#===========================================
+#==========FONCTIONS DE TRAITEMENT==========
+#===========================================
+
+
+def getAllWords(path_file):
+    dicoWords={}
+    srcClean=f.prepareFile(path_file)
+    lstStr=f.getLstStr(srcClean)
+    for string in lstStr:
+        d=f.getWords(string)
+        dicoWords.update(check(dicoWords,d))
+    return dicoWords
+    
+def getAllTriGram(path_file):
+    dicoTriGram={}
+    srcClean=f.prepareFile(path_file)
+    lstStr=f.getLstStr(srcClean)
+    for string in lstStr:
+        d=f.getTriGram(string)
+        dicoTriGram.update(check(dicoTriGram,d))
+    return dicoTriGram
+
+def getAllSuffix(path_file):
+    dicoSuffix={}
+    srcClean=f.prepareFile(path_file)
+    lstStr=f.getLstStr(srcClean)
+    for string in lstStr:
+        d=f.getSuffix(string)
+        dicoSuffix.update(check(dicoSuffix,d))
+    return dicoSuffix
+
+#=========================================
+#==========FONCTIONS PRINCIPALES==========
+#=========================================
+
+
+def creeDataBase(path_file):
+    """Cette fonction cree la base de donnees pour chaque chaque langue
+et pour chaque hypothese verifiee"""
+#path_file="./corpus_entrainement/15"
+#path_file="./corpus_entrainement/30"
+#path_file="./corpus_entrainement/45"
+#path_file="./corpus_entrainement/60"
+
+    lst=f.creeChemin(path_file)#Repertorie le dossier de chaque langue
+    for x in lst:
+        langue=os.path.basename(x)#nom du dernier dossier de mon chemin
+        lstFiles=f.creeChemin(x)#nom de chaque fichier fils du dossier x
+
+        #On cree des dicos pour chaque hypothese
+        dicoAllWords={}
+        dicoAllTriGram={}
+        dicoAllSuffix={}
+
+        for y in lstFiles:#il execute les instructions suivantes pour chacun des fichiers
+            dicoWords=f.getBestRes(getAllWords(y))
+            dicoAllWords.update(check(dicoAllWords,dicoWords))
+        
+            dicoTriGram=f.getBestRes(getAllTriGram(y))
+            dicoAllTriGram.update(check(dicoAllTriGram,dicoTriGram))
+
+            dicoSuffix=f.getBestRes(getAllSuffix(y))
+            dicoAllSuffix.update(check(dicoAllSuffix,dicoSuffix))
+
+        f.writeRes("./ressources/words/words_"+langue+".json",dicoAllWords)
+        f.writeRes("./ressources/trigram/trigram_"+langue+".json",dicoAllTriGram)
+        f.writeRes("./ressources/suffix/suffix_"+langue+".json",dicoAllSuffix)
+        
+
+def analyseur_mots(document):
+    """Cette fonction diagnostique la langue d'un document selon l'hypothese que les mots
+sont caracteristiques d'une langue"""
+    src=f.prepareFile(document)
+    dicoRes={}
+    lstResrc=f.creeChemin("./ressources/words")
+    for x in lstResrc:
+        langue=x[-7:-5]
+        res=0 #nombre de mots similaires
+        dicoResrc=f.readRes(x)
+        dicoFile=f.getBestRes(f.getWords(src))
+        for key,_ in dicoFile.iteritems():
+            if key in dicoResrc:
+                res+=1
+        dicoRes[langue]=res
+    bestRes=diagnostic(dicoRes)
+    print dicoRes
+    return afficheRes(bestRes)
+
+
+def analyseur_trigramme(document):
+    """Cette fonction diagnostique la langue d'un document selon l'hypothese que les trigrammes
+sont caracteristiques d'une langue"""
+    src=f.prepareFile(document)
+    dicoRes={}
+    lstResrc=f.creeChemin("./ressources/trigram")
+    for x in lstResrc:
+        langue=x[-7:-5]
+        res=0 #nombre de mots similaires
+        dicoResrc=f.readRes(x)
+        dicoFile=f.getBestRes(f.getTriGram(src))
+        for key,_ in dicoFile.iteritems():
+            if key in dicoResrc:
+                res+=1
+        dicoRes[langue]=res
+    bestRes=diagnostic(dicoRes)
+    print dicoRes
+    return afficheRes(bestRes)
+
+
+def analyseur_suffixe(document):
+    """Cette fonction diagnostique la langue d'un document selon l'hypothese que les suffixes des mots
+sont caracteristiques d'une langue"""
+    src=f.prepareFile(document)
+    dicoRes={}
+    lstResrc=f.creeChemin("./ressources/suffix")
+    for x in lstResrc:
+        langue=x[-7:-5]
+        res=0 #nombre de mots similaires
+        dicoResrc=f.readRes(x)
+        dicoFile=f.getBestRes(f.getSuffix(src))
+        for key,_ in dicoFile.iteritems():
+            if key in dicoResrc:
+                res+=1
+        dicoRes[langue]=res
+    bestRes=diagnostic(dicoRes)
+    print dicoRes
+    return afficheRes(bestRes)
+
+#appel du script:
+
+if __name__=='__main__':
+    function=getattr(sys.modules[__name__],sys.argv[1])
+    filename=sys.argv[2]
+    function(filename)
+    

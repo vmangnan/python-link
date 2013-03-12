@@ -1,0 +1,340 @@
+#!/usr/local/bin/pythonw
+# -*- coding: utf-8 -*-
+
+#IMPORT ET CONSTANTES
+#==============================================================================#
+#==============================================================================#
+
+import sys
+import os
+import re, string, htmlentitydefs, operator
+import matplotlib.pyplot as plt
+import numpy as np
+
+#ch=sys.argv[1]
+color="yellow"
+
+#Creation des dossiers
+ch=os.listdir("./corpus")
+try: os.mkdir("./sorties")
+except: print "Sorties fusionnees avec repertoire courant"
+try: os.mkdir("./colories")
+except: print "Colories fusionnees avec repertoire courant"
+
+
+
+#DEFINITION DES FONCTIONS
+#==============================================================================#
+#==============================================================================#
+
+#LECTURE DE LA SOURCE ET NETTOYAGE
+#==============================================================================#
+
+#LECTURE DU FICHIER
+def read_file(path_file) :
+  f = open(path_file, 'r')
+  s = f.read()
+  f.close()
+  return s
+
+#TROUVER L'ENCODING
+def source2encoding(s) :
+  default_encoding = 'iso-8859-1'
+  pattern_detect_encoding = u'<meta http-equiv=["\']content-Type["\'][ \n\r]*content=["\']text/html; ?charset=(.*?)["\']'
+  pattern_compiled = re.compile(pattern_detect_encoding, re.I)
+  match_charset = re.search(pattern_compiled, s)
+ 
+  if match_charset : encoding = string.lower(match_charset.group(1))
+  else : encoding = default_encoding
+  print "Encoding : "+encoding
+  return encoding
+
+#METTRE EN UNICODE
+def code2unicode(s):
+  s=unicode(s,source2encoding(s))
+  return s
+
+#NETTOYER LE FICHIER HTML DES SCRIPT
+def clean_unicode_html(s_unicode) :
+  #Conversion des espaces
+  clean_html = re.sub(u'&nbsp;', ' ', s_unicode)
+  clean_html = re.sub(u'[\s]+', u' ', clean_html)
+
+  #Supression des balises HTML
+  pattern1 = re.compile(u'<script.+?</script>', re.I | re.M)
+  clean_html = pattern1.sub(u'', clean_html)
+
+  pattern2 = re.compile(u'<!\-\-.+?\-\->', re.M)
+  clean_html = pattern2.sub(u'', clean_html)
+
+  pattern3 = re.compile(u'<select.+?</select>', re.I | re.M)
+  clean_html = pattern3.sub(u'', clean_html)
+
+  pattern4 = re.compile(u'<style.+?</style>', re.I | re.M)
+  clean_html = pattern4.sub(u'', clean_html)
+
+  #Suppression des balises (ancinnes versions du code)
+  clean_html = re.sub(u'(?:&gt;|&lt;)', u' ', clean_html)
+
+  #Macroponctuation
+  pattern5 = re.compile(u'[\s]*</*[^>]+/*>[\s]*', re.I | re.M)
+  clean_html = pattern5.sub(u' # ', clean_html)
+  
+  pattern6 = re.compile(u'\s[#\s]+', re.I | re.M)
+  clean_html = pattern6.sub(u' # ', clean_html)
+
+  #Suppression des séparateurs
+  clean_html = re.sub(u'[,.;:\(\)~\]\[]+', u'', clean_html)
+  
+  return clean_html
+
+#TRANSLITERATION DES ENTITES SGML
+def decode_html_entities(s_unicode) :
+  html = re.sub(u'&#([0-9]+);', replace_num_entities, s_unicode)
+  pattern = re.compile(u'&([a-z]+);', re.I)
+  html = pattern.sub(replace_alpha_entities, html)
+  return html
+
+def replace_num_entities(matchobj_unicode) :
+  if int(matchobj_unicode.group(1)) in range(65535):
+    return unichr(int(matchobj_unicode.group(1)))
+  else:
+    return u'&#%s;'%(matchobj_unicode.group(1))
+ 
+def replace_alpha_entities(matchobj_unicode) :
+  k = matchobj_unicode.group(1)
+  if not htmlentitydefs.entitydefs.has_key(k) :
+    if k.isupper() :
+      k = string.lower(matchobj_unicode.group(1))
+      if not htmlentitydefs.entitydefs.has_key(cle) : return ''
+    else : return ''
+  if len(htmlentitydefs.entitydefs[k]) == 1 :
+    car = htmlentitydefs.entitydefs[k]
+    return unicode(car, 'iso-8859-1')
+  else :
+    str_code = htmlentitydefs.entitydefs[k].strip(u'&#;')
+    return unichr(int(str_code))
+
+#AUTRES FONCTIONS PRATIQUES
+#==============================================================================#
+
+#DECOUPAGE DES "MOTS"
+def split2(chaine,chinois=False):
+  if chinois:
+    tr=[]
+    for x in chaine:
+      if x in [" " , "," , ";" , "." , "(" , ")"]:
+        tr+=""
+      else:
+        tr+=x
+    return tr
+  else: return chaine.split()
+
+#TRANSFORMATION DES LISTES EN CHAINES
+def list2str(l):
+  tmp=u""
+  for x in l:
+    if type(x)<>unicode: tmp+=str(x)+u" "
+    tmp+=x+u" "
+  return tmp[:-1]
+
+#CALCUL DE LA MOYENNE
+def moyenne(l):
+  n=0
+  som=0
+  for x in l:
+    n+=1
+    som+=x
+  return som*1.0/n
+
+#ECHELLE LOGARITHMIQUE SUR UNE LISTE
+def liste2logliste(l):
+  return [np.log(x) for x in l]
+
+
+#TRAITEMENT DES DICOS
+#==============================================================================#
+
+#IMPLEMANTATION DU DICO
+def dict_count(d, k) :
+  k=k.lower() #réduit la chaîne de caractère en miniscules
+  if(d.has_key(k)) :
+    d[k] += 1
+    d["\\etage\\"]=1 #on peut ainsi arrêter la boucle si l'étage précédent ne contient pas 2 groupes identiques
+  else: d[k] = 1
+
+#CREATION D'UN DICO DEPUIS UNE CHAINE
+def dico(s,chinois=False):
+  d,s={},split2(s,chinois)
+  for k in s:
+    if k<>"#":dict_count(d,k)
+  return d
+
+#TRANSFORMATION DES DICOS EN LISTES DE TUPLES
+def dico2tuple(d):
+  l=d.items()
+  l.sort(key=operator.itemgetter(1),reverse=True)
+  return l
+
+#COMPTAGE DU DICO (mots différents)
+def nombremots(d):
+  c=0
+  for i in d:
+    c+=1
+  return c
+
+#COMPTAGE DU DICO
+def nombremots_total(d):
+  c=0
+  for i in d:
+    c+=d[i]
+  return c
+
+#RAPPORT MOTS/MOTS DIFFERENTS
+def diff_nmbrmots(d):
+  return 1.0*nombremots(d)/nombremots_total(d)
+
+#NETTOYAGE DES VALEURS 1 DU DICO
+def nettoyage_dico(d):
+  d2={}
+  for x in d: 
+    if d[x]>1:
+      d2[x]=d[x]
+  return d2
+
+#TRAVAIL SUR LA SORTIE EN HTML
+#==============================================================================#
+
+#TRANSFORMATION DES TUPLES EN LISTES HTML
+def tuple2ul(l):
+  s=""
+  y=[]
+  z=[]
+  for x in l:
+    s+='<li>%s :: %s</li>'%(x[0].encode("UTF-8"), str(x[1]).encode("UTF-8"))
+    y+=[x[1]] #liste: Nombres de mots
+    z+=[len(x[0])] #taille des mots 
+  return (s,y,z)
+
+#COLORIER UNE CHAINE DANS UN HTML
+def color_string(s_unicode, substring, color) :
+  #print 'color string : %s'%(substring.encode('utf-8'))
+  try:
+    pattern1 = re.compile(u'%s'%(substring), re.I | re.M)
+    replace = u'<span style="color:%s; background-color:grey;">%s</span>'%(color, substring)
+    output = pattern1.sub(replace, s_unicode)
+    return output
+  except:return s_unicode
+
+#ECRITURE DANS UN FICHIER
+def write_file(path_file, s) :
+  f = open(path_file, 'w')
+  f.write(s)
+  f.close()
+
+#ECRITURE SOUS FORME D'UNE LISTE DE 'mot :: effectif'
+def sortie_html(d,s):
+  t=tuple2ul(d)
+  texte = """
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+                      "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" >
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="Author's name" />
+    <meta name="keywords" content="" />
+    <meta name="description" content="" />
+    <meta name="robots" content="all" />
+    <title>Page's title</title>
+</head>
+<body>
+<div id="main">
+    <ul>"""+t[0]+"""
+    </ul>
+</div>
+</body>
+</html>"""
+  write_file(s,texte)
+
+#FENETRES GLISSANTES ET GROUPES DE MOTS CONTIGUS
+#==============================================================================#
+
+#FENETRES GLISSANTES (sous programme pour des groupes de n mots)
+def sousfenglis(l,n,dct):
+  ## deux mots uniquement
+  for i in range(len(l)-n):
+    tmp=list2str(l[i:i+n])
+    if "#" not in tmp:
+      dict_count(dct,tmp)
+  return dct
+
+#FENETRES GLISSANTES (boucle globale)
+def fenglis(s,chinois=False):
+  fglis={}
+  l=split2(s,chinois) ###
+  for n in range(2,10):
+    fglis["\\etage\\"]=0
+    sousfenglis(l,n,fglis)
+    if fglis["\\etage\\"]==0: return fglis
+
+  fglis=nettoyage_dico(fglis)
+  return fglis
+
+#TRAVAIL SUR LES DOCUMENTS A PROPREMENT PARLER
+#==============================================================================#
+
+#TRAITEMENT D'UN SEUL DOCUMENT
+def rn(chemin,sortie,couleur):
+  chinois="ch" in chemin #traitement du cas chinois (selon le nom du fichier)
+
+  s=read_file(chemin) #lecture
+  s=code2unicode(s) #lecture de l'encoding et encodage en unicode Python
+  dec=decode_html_entities(s) #translitération des entités SGML
+  dec=clean_unicode_html(dec) #nettoyage et macroponctuation
+  d=dico(dec,chinois) #comptage et conversion en un dico {"mot":fréquence,"mot2":fréquence}
+  print "Fichier : "+chemin+"\n"
+  l=dico2tuple(d) #conversion du dico en liste de tuples pour le tri décroissant
+  sortie_html(l,sortie) #encoding en UTF-8 et écriture en HTML
+  
+
+  #Traçage de la courbe
+  x=range(nombremots(d)) 
+  x,y=liste2logliste(x),liste2logliste(tuple2ul(l)[1])
+  z=liste2logliste(tuple2ul(l)[2])
+  #plt.plot(x,y,"r-")
+  #plt.plot(x,z,"bo")
+
+  ttt=fenglis(dec,chinois)
+  sss=dico2tuple(ttt) #conversion du dico en liste de tuples pour le tri décroissant
+  sortie_html(sss,couleur) #encoding en UTF-8 et écriture en HTML
+  #Coloriage
+  #for cle in ttt:
+  #  s=color_string(s,cle,color)
+  #write_file(couleur,s.encode("UTF-8"))
+
+  return diff_nmbrmots(d)
+
+#BOUCLE GENERALE POUR LE TRAITEMENT DU CORPUS
+def total(ch):
+  moy=[]
+  for u in ch:
+    inp="corpus/"+u
+    outp="sorties/"+u
+    colorp="colories/"+u
+    moy+=[rn(inp,outp,colorp)]
+
+  #Tracé de différentes courbes et axes
+  #plt.ylabel('Taille du mot (echelle log)')
+  #plt.ylabel('Effectif (echelle log)')
+  #plt.xlabel("Rang (echelle log)")
+    
+  plt.plot(range(len(moy)),moy,"yo")
+  plt.ylabel('Rapport nombre mots differents/nombre mots total')
+  plt.xlabel("Document")
+  plt.show()
+  return moyenne(moy)
+
+
+total(ch) #lancement de la boucle
+
+
